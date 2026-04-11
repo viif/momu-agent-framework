@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from momu_agent.core.exceptions import MomuAgentException
+from momu_agent.core.exceptions import LLMException
 from momu_agent.core.llm import MomuAgentLLM
 
 
@@ -17,7 +17,7 @@ def test_initialization_success():
 
 def test_initialization_missing_params():
     """测试缺少必填参数时抛出异常"""
-    with pytest.raises(MomuAgentException):
+    with pytest.raises(LLMException):
         MomuAgentLLM(model="", api_key="key", base_url="url")
 
 

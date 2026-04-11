@@ -4,7 +4,7 @@ from typing import Dict, Iterator, List, Optional, cast
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
-from .exceptions import MomuAgentException
+from .exceptions import LLMException
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +37,14 @@ class MomuAgentLLM:
             **kwargs: 传递给 OpenAI 客户端的其他参数。
 
         Raises:
-            MomuAgentException: 当必填参数缺失时抛出。
+            LLMException: 当必填参数缺失时抛出。
         """
         if not model:
-            raise MomuAgentException("初始化失败：必须提供 'model' 参数。")
+            raise LLMException("初始化失败：必须提供 'model' 参数。")
         if not api_key:
-            raise MomuAgentException("初始化失败：必须提供 'api_key' 参数。")
+            raise LLMException("初始化失败：必须提供 'api_key' 参数。")
         if not base_url:
-            raise MomuAgentException("初始化失败：必须提供 'base_url' 参数。")
+            raise LLMException("初始化失败：必须提供 'base_url' 参数。")
 
         self.model = model
         self.api_key = api_key
@@ -64,7 +64,7 @@ class MomuAgentLLM:
         except Exception as e:
             error_msg = f"LLM 客户端初始化失败: {str(e)}"
             logger.error(error_msg)
-            raise MomuAgentException(error_msg)
+            raise LLMException(error_msg)
 
     def think(
         self, messages: List[Dict[str, str]], temperature: Optional[float] = None
@@ -80,7 +80,7 @@ class MomuAgentLLM:
             str: 生成的文本片段。
 
         Raises:
-            MomuAgentException: 当 API 调用失败时。
+            LLMException: 当 API 调用失败时。
         """
         logger.info(f"🧠 开始流式调用模型: {self.model}")
         logger.debug(f"对话历史: {messages}")
@@ -112,7 +112,7 @@ class MomuAgentLLM:
         except Exception as e:
             error_msg = f"流式调用失败: {str(e)}"
             logger.error(error_msg)
-            raise MomuAgentException(error_msg)
+            raise LLMException(error_msg)
 
     def invoke(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
@@ -126,7 +126,7 @@ class MomuAgentLLM:
             str: 完整的模型响应文本。
 
         Raises:
-            MomuAgentException: 当 API 调用失败时。
+            LLMException: 当 API 调用失败时。
         """
         logger.info(f"➡️  开始非流式调用模型: {self.model}")
 
@@ -140,10 +140,10 @@ class MomuAgentLLM:
             )
             content = response.choices[0].message.content
             if not content:
-                raise MomuAgentException("模型返回内容为空")
+                raise LLMException("模型返回内容为空")
             logger.info("✅ 非流式响应完成")
             return content
         except Exception as e:
             error_msg = f"非流式调用失败: {str(e)}"
             logger.error(error_msg)
-            raise MomuAgentException(error_msg)
+            raise LLMException(error_msg)
