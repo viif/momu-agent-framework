@@ -40,7 +40,7 @@ class Agent(ABC):
             self.logger.debug(f"🤖 系统提示词已加载: {self.system_prompt[:50]}...")
 
     @abstractmethod
-    def run(self, input_text: str, **kwargs) -> str:
+    async def run(self, input_text: str, **kwargs) -> str:
         """运行Agent"""
         pass
 
