@@ -1,5 +1,5 @@
 [project]
-name = "momu-agent"
+name = "momu-agent-framework"
 version = "0.1.0"
 description = "参考HelloAgents实现的智能体框架"
 readme = "README.md"

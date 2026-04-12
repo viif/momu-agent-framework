@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-本文件旨在为 Claude Code (claude.ai/code) 提供在 `momu-agent` 仓库中工作的指导。
+本文件旨在为 Claude Code (claude.ai/code) 提供在 `momu-agent-framework` 仓库中工作的指导。
 
 ## 项目概述
 
-`momu-agent` 是基于 HelloAgents 框架构建的智能体框架。项目处于早期阶段，`momu_agent/` 是主包，`main.py` 是入口点。
+`momu-agent-framework` 是基于 HelloAgents 框架构建的智能体框架。项目处于早期阶段，`momu_agent/` 是主包。
 
 ## 常用命令
 
