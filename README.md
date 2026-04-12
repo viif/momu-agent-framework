@@ -47,8 +47,10 @@ LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 import asyncio
 from momu_agent.core.config import Config
 from momu_agent.core.llm import LLM
+from momu_agent.utils.logger import setup_logger
 
 config = Config.from_env()
+setup_logger(level=config.log_level)
 llm = LLM(model=config.model_id, api_key=config.api_key, base_url=config.base_url)
 ```
 
