@@ -43,16 +43,16 @@ class LLM:
         self.logger = get_logger(__name__)
 
         self.logger.debug(
-            f"🧠 正在初始化异步 LLM 客户端: {self.model} @ {self.base_url}"
+            f"💬 正在初始化异步 LLM 客户端: {self.model} @ {self.base_url}"
         )
 
         try:
             self._client = AsyncOpenAI(
                 api_key=self.api_key, base_url=self.base_url, timeout=self.timeout
             )
-            self.logger.info(f"🧠 异步 LLM 客户端初始化成功: {self.model}")
+            self.logger.info(f"💬 异步 LLM 客户端初始化成功: {self.model}")
         except Exception as e:
-            error_msg = f"🧠 LLM 客户端初始化失败: {str(e)}"
+            error_msg = f"💬 LLM 客户端初始化失败: {str(e)}"
             self.logger.error(error_msg)
             raise LLMException(error_msg)
 
@@ -65,7 +65,7 @@ class LLM:
         Yields:
             str: 生成的文本片段
         """
-        self.logger.info(f"🧠 开始异步流式调用模型: {self.model}")
+        self.logger.info(f"💬 开始异步流式调用模型: {self.model}")
 
         try:
             typed_messages = cast(list[ChatCompletionMessageParam], messages)
@@ -87,10 +87,10 @@ class LLM:
                     full_content += content
                     yield content
 
-            self.logger.info("🧠 异步流式响应完成")
+            self.logger.info("💬 异步流式响应完成")
 
         except Exception as e:
-            error_msg = f"🧠 异步流式调用失败: {str(e)}"
+            error_msg = f"💬 异步流式调用失败: {str(e)}"
             self.logger.error(error_msg)
             raise LLMException(error_msg)
 
@@ -101,7 +101,7 @@ class LLM:
         Returns:
             str: 完整的模型响应文本
         """
-        self.logger.info(f"🧠 开始异步非流式调用模型: {self.model}")
+        self.logger.info(f"💬 开始异步非流式调用模型: {self.model}")
 
         try:
             typed_messages = cast(list[ChatCompletionMessageParam], messages)
@@ -117,10 +117,10 @@ class LLM:
             if not content:
                 raise LLMException("模型返回内容为空")
 
-            self.logger.info("🧠 异步非流式响应完成")
+            self.logger.info("💬 异步非流式响应完成")
             return content
 
         except Exception as e:
-            error_msg = f"🧠 异步非流式调用失败: {str(e)}"
+            error_msg = f"💬 异步非流式调用失败: {str(e)}"
             self.logger.error(error_msg)
             raise LLMException(error_msg)

@@ -59,7 +59,7 @@ class Memory:
     def add_record(self, record_type: str, content: str) -> None:
         """添加一条记录，type 为 'execution' 或 'reflection'"""
         self.records.append({"type": record_type, "content": content})
-        self.logger.debug(f"记忆已更新，新增 '{record_type}' 记录")
+        self.logger.debug(f"🧠 记忆已更新，新增 '{record_type}' 记录")
 
     def get_last_execution(self) -> str:
         """返回最近一次 execution 记录的内容，无则返回空字符串"""
@@ -143,13 +143,13 @@ class ReflectionAgent(Agent):
         Returns:
             最终优化后的回答
         """
-        self.logger.info(f"'{self.name}' 收到任务: {input_text}")
+        self.logger.info(f"🤖 '{self.name}' 收到任务: {input_text}")
 
         # 每次运行重置记忆
         self.memory = Memory()
 
         # ── 初始生成 ──────────────────────────────────────────────
-        self.logger.info("正在进行初始生成...")
+        self.logger.info("🤖 正在进行初始生成...")
         initial_result = await self._call_llm(
             self.prompts["initial"].format(task=input_text), **kwargs
         )
@@ -157,7 +157,7 @@ class ReflectionAgent(Agent):
 
         # ── 反思迭代循环 ──────────────────────────────────────────
         for i in range(1, self.max_iterations + 1):
-            self.logger.info(f"--- 第 {i}/{self.max_iterations} 轮反思 ---")
+            self.logger.info(f"🤖 --- 第 {i}/{self.max_iterations} 轮反思 ---")
 
             # 反思
             last_result = self.memory.get_last_execution()
@@ -166,15 +166,15 @@ class ReflectionAgent(Agent):
                 **kwargs,
             )
             self.memory.add_record("reflection", feedback)
-            self.logger.debug(f"反思反馈: {feedback!r}")
+            self.logger.debug(f"🤖 反思反馈: {feedback!r}")
 
             # 提前退出判断
             if any(sig in feedback.lower() for sig in _NO_IMPROVEMENT_SIGNALS):
-                self.logger.info("反思认为回答已无需改进，提前结束迭代")
+                self.logger.info("🤖 反思认为回答已无需改进，提前结束迭代")
                 break
 
             # 优化
-            self.logger.info(f"根据反馈优化回答（第 {i} 轮）...")
+            self.logger.info(f"🤖 根据反馈优化回答（第 {i} 轮）...")
             refined = await self._call_llm(
                 self.prompts["refine"].format(
                     task=input_text,
@@ -187,7 +187,7 @@ class ReflectionAgent(Agent):
 
         # ── 收尾 ──────────────────────────────────────────────────
         final_answer = self.memory.get_last_execution()
-        self.logger.info(f"任务完成，最终答案: {final_answer!r}")
+        self.logger.info(f"🤖 任务完成，最终答案: {final_answer!r}")
 
         self.add_message(Message(input_text, "user"))
         self.add_message(Message(final_answer, "assistant"))
@@ -225,7 +225,7 @@ class ReflectionAgent(Agent):
             if not tool_calls:
                 return result
 
-            self.logger.info(f"检测到 {len(tool_calls)} 个工具调用，正在执行...")
+            self.logger.info(f"🤖 检测到 {len(tool_calls)} 个工具调用，正在执行...")
             tasks = [
                 self.parser.prepare_tool_task(
                     call["tool_name"], call["raw_params"], self.tool_registry
@@ -248,7 +248,7 @@ class ReflectionAgent(Agent):
                 )
 
         self.logger.warning(
-            f"已达到最大工具调用次数 ({self.max_tool_iterations})，强制终止。"
+            f"🤖 已达到最大工具调用次数 ({self.max_tool_iterations})，强制终止。"
         )
         return f"⚠️ 已达到最大工具调用次数限制 ({self.max_tool_iterations})"
 

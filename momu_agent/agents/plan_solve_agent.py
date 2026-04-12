@@ -67,20 +67,20 @@ class Planner:
         prompt = self.prompt_template.format(question=question)
         messages = [{"role": "user", "content": prompt}]
 
-        self.logger.info("正在生成计划...")
+        self.logger.info("🤖 正在生成计划...")
         response_text = await self.llm.invoke(messages, **kwargs) or ""
-        self.logger.debug(f"规划器原始响应:\n{response_text}")
+        self.logger.debug(f"🤖 规划器原始响应:\n{response_text}")
 
         try:
             plan_str = response_text.split("```python")[1].split("```")[0].strip()
             plan = ast.literal_eval(plan_str)
             if isinstance(plan, list):
-                self.logger.info(f"计划生成成功，共 {len(plan)} 个步骤")
+                self.logger.info(f"🤖 计划生成成功，共 {len(plan)} 个步骤")
                 return plan
-            self.logger.warning("解析结果不是列表，返回空计划")
+            self.logger.warning("🤖 解析结果不是列表，返回空计划")
             return []
         except (ValueError, SyntaxError, IndexError) as e:
-            self.logger.warning(f"解析计划失败: {e}，原始响应: {response_text!r}")
+            self.logger.warning(f"🤖 解析计划失败: {e}，原始响应: {response_text!r}")
             return []
 
 
@@ -137,7 +137,7 @@ class Executor:
             if not tool_calls:
                 return result
 
-            self.logger.info(f"检测到 {len(tool_calls)} 个工具调用，正在执行...")
+            self.logger.info(f"🤖 检测到 {len(tool_calls)} 个工具调用，正在执行...")
             tasks = [
                 self.parser.prepare_tool_task(
                     call["tool_name"], call["raw_params"], self.tool_registry
@@ -160,7 +160,7 @@ class Executor:
                 )
 
         self.logger.warning(
-            f"步骤已达到最大工具调用次数 ({self.max_tool_iterations})，强制终止。"
+            f"🤖 步骤已达到最大工具调用次数 ({self.max_tool_iterations})，强制终止。"
         )
         return f"⚠️ 已达到最大工具调用次数限制 ({self.max_tool_iterations})"
 
@@ -179,9 +179,9 @@ class Executor:
         history = ""
         final_answer = ""
 
-        self.logger.info(f"开始执行计划，共 {len(plan)} 个步骤")
+        self.logger.info(f"🤖 开始执行计划，共 {len(plan)} 个步骤")
         for i, step in enumerate(plan, 1):
-            self.logger.info(f"执行步骤 {i}/{len(plan)}: {step}")
+            self.logger.info(f"🤖 执行步骤 {i}/{len(plan)}: {step}")
             prompt = self.prompt_template.format(
                 question=question,
                 plan=plan,
@@ -202,9 +202,9 @@ class Executor:
 
             history += f"步骤 {i}: {step}\n结果: {result}\n\n"
             final_answer = result
-            self.logger.debug(f"步骤 {i} 完成，结果: {result!r}")
+            self.logger.debug(f"🤖 步骤 {i} 完成，结果: {result!r}")
 
-        self.logger.info("所有步骤执行完毕")
+        self.logger.info("🤖 所有步骤执行完毕")
         return final_answer
 
 
@@ -269,20 +269,20 @@ class PlanSolveAgent(Agent):
         Returns:
             最终答案
         """
-        self.logger.info(f"'{self.name}' 收到问题: {input_text}")
+        self.logger.info(f"🤖 '{self.name}' 收到问题: {input_text}")
 
         # 规划阶段
         plan = await self.planner.plan(input_text, **kwargs)
         if not plan:
             error_msg = "无法生成有效的行动计划，任务终止。"
-            self.logger.warning(error_msg)
+            self.logger.warning(f"🤖 {error_msg}")
             self.add_message(Message(input_text, "user"))
             self.add_message(Message(error_msg, "assistant"))
             return error_msg
 
         # 执行阶段
         final_answer = await self.executor.execute(input_text, plan, **kwargs)
-        self.logger.info(f"任务完成，最终答案: {final_answer!r}")
+        self.logger.info(f"🤖 任务完成，最终答案: {final_answer!r}")
 
         self.add_message(Message(input_text, "user"))
         self.add_message(Message(final_answer, "assistant"))

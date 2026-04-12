@@ -122,7 +122,7 @@ class SimpleAgent(Agent):
                     self.add_message(Message(result, "tool"))
 
             self.logger.warning(
-                f"🤖 ⚠️ Agent 达到最大迭代次数 ({max_tool_iterations})，强制终止。"
+                f"🤖 Agent 达到最大迭代次数 ({max_tool_iterations})，强制终止。"
             )
             return (
                 f"⚠️ 已达到最大工具调用次数限制 ({max_tool_iterations})，"

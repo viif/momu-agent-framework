@@ -153,15 +153,13 @@ class ReActAgent(Agent):
 
                 # 6. 聚合观察结果并更新历史
                 observation = self._format_observations(results)
-                self.logger.info(f"🤖 👀 观察结果:\n{observation}")
+                self.logger.info(f"🤖 观察结果:\n{observation}")
                 react_history.append(
                     f"Thought: {thought}\nAction: {action}\nObservation:\n{observation}"
                 )
 
             # 达到最大步数
-            final_answer = (
-                f"🤖 ⚠️ 已达到最大步数 ({self.max_steps})，Agent 未能得出结论。"
-            )
+            final_answer = f"🤖 已达到最大步数 ({self.max_steps})，Agent 未能得出结论。"
             self.logger.warning(final_answer)
             self.add_message(Message(final_answer, "assistant"))
             return final_answer
