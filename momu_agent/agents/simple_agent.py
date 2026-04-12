@@ -1,6 +1,5 @@
 """简单Agent实现"""
 
-import re
 from typing import Any, AsyncIterator
 
 from ..core.agent import Agent
@@ -56,32 +55,26 @@ class SimpleAgent(Agent):
         messages.append({"role": "user", "content": input_text})
         return messages
 
-    def _prepare_tool_task(self, tool_name: str, raw_parameters: str) -> dict[str, Any]:
-        """准备工具调用任务（参数解析和类型转换）"""
-        if not self.tool_registry:
-            return {"tool_name": tool_name, "error": "未配置工具注册表"}
-
-        try:
-            tool_obj = self.tool_registry.get_tool(tool_name)
-            if not tool_obj:
-                return {"tool_name": tool_name, "error": "工具未注册"}
-
-            parsed_params = self.parser.parse_typed_parameters(
-                tool_name, raw_parameters, tool_obj
+    @staticmethod
+    def _format_tool_result(res: dict[str, Any]) -> str:
+        """将单条工具执行结果格式化为可读字符串"""
+        if res.get("status") == "error":
+            return (
+                f"❌ 工具 {res['tool_name']} 执行失败：{res.get('result', '未知错误')}"
             )
-            return {"tool_name": tool_name, "input_data": parsed_params}
-        except Exception as e:
-            return {"tool_name": tool_name, "error": str(e)}
+        return f"🔧 工具 {res['tool_name']} 执行结果：\n{res.get('result', '无输出')}"
 
     async def _execute_tool_calls_async(
         self, tool_calls: list[dict[str, Any]]
     ) -> list[str]:
-        """异步并发执行所有工具调用，返回格式化结果"""
+        """异步并发执行所有工具调用，返回格式化结果列表"""
         if not tool_calls or not self.tool_registry:
             return []
 
         tasks = [
-            self._prepare_tool_task(call["tool_name"], call["raw_params"])
+            self.parser.prepare_tool_task(
+                call["tool_name"], call["raw_params"], self.tool_registry
+            )
             for call in tool_calls
         ]
         try:
@@ -91,14 +84,7 @@ class SimpleAgent(Agent):
                 max_workers=4,
                 timeout=30.0,
             )
-            return [
-                (
-                    f"❌ 工具 {res['tool_name']} 执行失败：{res.get('result', '未知错误')}"
-                    if res.get("status") == "error"
-                    else f"🔧 工具 {res['tool_name']} 执行结果：\n{res.get('result', '无输出')}"
-                )
-                for res in results
-            ]
+            return [self._format_tool_result(res) for res in results]
         except Exception as e:
             self.logger.error(f"🤖 工具执行器崩溃：{str(e)}")
             return [f"❌ 工具执行器崩溃：{str(e)}"]
@@ -120,13 +106,7 @@ class SimpleAgent(Agent):
                 )
                 tool_results = await self._execute_tool_calls_async(tool_calls)
 
-                clean_response = response
-                for call in tool_calls:
-                    pattern = re.escape(
-                        f"[TOOL_CALL:{call['tool_name']}:{call['raw_params']}]"
-                    )
-                    clean_response = re.sub(pattern, "", clean_response)
-
+                clean_response = self.parser.strip_tool_calls(response, tool_calls)
                 messages.append({"role": "assistant", "content": clean_response})
                 self.add_message(Message(clean_response, "assistant"))
 
@@ -200,13 +180,7 @@ class SimpleAgent(Agent):
                 raise AgentException(error_msg) from e
             return
 
-        messages = []
-        if self.system_prompt:
-            messages.append({"role": "system", "content": self.system_prompt})
-        for msg in self._history:
-            messages.append({"role": msg.role, "content": msg.content})
-        messages.append({"role": "user", "content": input_text})
-
+        messages = self._build_messages(input_text)
         full_response = ""
         try:
             async for chunk in self.llm.think(messages, **kwargs):
