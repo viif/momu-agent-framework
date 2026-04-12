@@ -1,8 +1,10 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from momu_agent.agents.reflection_agent import Memory, ReflectionAgent
+from momu_agent.tools.base import ToolParameter
+from momu_agent.tools.registry import ToolRegistry
 
 
 @pytest.fixture
@@ -200,3 +202,267 @@ async def test_english_no_improvement_signal(mock_llm):
 
     assert result == "Initial answer"
     assert mock_llm.invoke.call_count == 2
+
+
+# ── 工具调用测试 ──────────────────────────────────────────────────────────────
+
+
+class MockCalculatorTool:
+    name = "calculator"
+    description = "计算数学表达式"
+
+    def get_parameters(self) -> list[ToolParameter]:
+        return [
+            ToolParameter(
+                name="expression",
+                type="string",
+                description="要计算的数学表达式",
+                required=True,
+            )
+        ]
+
+    def run(self, parameters: dict) -> str:
+        return str(eval(parameters["expression"]))  # noqa: S307
+
+
+@pytest.fixture
+def mock_registry():
+    """创建模拟工具注册表"""
+    registry = Mock(spec=ToolRegistry)
+    registry.get_tools_description = Mock(
+        return_value="calculator: 计算数学表达式\n  - expression (string, 必填): 要计算的数学表达式"
+    )
+    registry.get_tool = Mock(return_value=MockCalculatorTool())
+    return registry
+
+
+def test_init_with_tool_registry(mock_llm, mock_registry):
+    """
+    传入 tool_registry 后，agent 持有注册表引用且 max_tool_iterations 默认为 3
+    """
+    agent = ReflectionAgent(name="ToolAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    assert agent.tool_registry is mock_registry
+    assert agent.max_tool_iterations == 3
+
+
+def test_init_with_custom_max_tool_iterations(mock_llm, mock_registry):
+    """
+    自定义 max_tool_iterations 应被正确存储
+    """
+    agent = ReflectionAgent(
+        name="ToolAgent",
+        llm=mock_llm,
+        tool_registry=mock_registry,
+        max_tool_iterations=5,
+    )
+
+    assert agent.max_tool_iterations == 5
+
+
+async def test_tool_system_prompt_included_in_messages(mock_llm, mock_registry):
+    """
+    有 tool_registry 时，LLM 收到的消息首条为 system role，且包含工具描述和调用协议
+    """
+    agent = ReflectionAgent(
+        name="ToolAgent", llm=mock_llm, tool_registry=mock_registry, max_iterations=1
+    )
+
+    mock_llm.invoke.side_effect = ["初始回答", "无需改进"]
+
+    await agent.run("测试工具提示词")
+
+    # 初始生成时的消息（第一次 invoke）
+    initial_messages = mock_llm.invoke.call_args_list[0][0][0]
+    assert initial_messages[0]["role"] == "system"
+    assert "calculator" in initial_messages[0]["content"]
+    assert "TOOL_CALL" in initial_messages[0]["content"]
+
+
+async def test_no_tool_registry_sends_user_only_message(mock_llm):
+    """
+    无 tool_registry 时，_call_llm 只发送单条 user 消息，不含 system role
+    """
+    agent = ReflectionAgent(name="NoToolAgent", llm=mock_llm, max_iterations=1)
+
+    mock_llm.invoke.side_effect = ["初始回答", "无需改进"]
+
+    await agent.run("无工具测试")
+
+    initial_messages = mock_llm.invoke.call_args_list[0][0][0]
+    assert len(initial_messages) == 1
+    assert initial_messages[0]["role"] == "user"
+
+
+@patch("momu_agent.agents.reflection_agent.run_parallel_tools")
+async def test_tool_called_during_initial_generation(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    初始生成阶段 LLM 返回工具调用 → run_parallel_tools 被调用 →
+    LLM 再次调用返回最终初始答案
+    """
+    agent = ReflectionAgent(
+        name="ToolAgent", llm=mock_llm, tool_registry=mock_registry, max_iterations=1
+    )
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {"expression": "2 + 3"},
+            "result": "5",
+            "status": "success",
+        }
+    ]
+    mock_llm.invoke.side_effect = [
+        '[TOOL_CALL:calculator:{"expression": "2 + 3"}]',  # 初始生成：调用工具
+        "计算结果是 5",  # 工具结果后的最终答案
+        "无需改进",  # 反思
+    ]
+
+    result = await agent.run("2 加 3 是多少？")
+
+    assert result == "计算结果是 5"
+    assert mock_run_parallel.called
+    assert mock_llm.invoke.call_count == 3  # 工具调用 + 继续生成 + 反思
+
+
+@patch("momu_agent.agents.reflection_agent.run_parallel_tools")
+async def test_tool_result_appended_as_tool_message(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    工具执行结果以 tool role 消息传入后续 LLM 调用
+    """
+    agent = ReflectionAgent(
+        name="ToolAgent", llm=mock_llm, tool_registry=mock_registry, max_iterations=1
+    )
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {"expression": "10 * 5"},
+            "result": "50",
+            "status": "success",
+        }
+    ]
+    mock_llm.invoke.side_effect = [
+        '[TOOL_CALL:calculator:{"expression": "10 * 5"}]',
+        "结果是 50",
+        "无需改进",
+    ]
+
+    await agent.run("10 乘以 5 是多少？")
+
+    # 工具调用后的继续生成（第二次 invoke）消息中应包含 tool role
+    continuation_messages = mock_llm.invoke.call_args_list[1][0][0]
+    roles = [m["role"] for m in continuation_messages]
+    assert "tool" in roles
+    tool_msg = next(m for m in continuation_messages if m["role"] == "tool")
+    assert "50" in tool_msg["content"]
+
+
+@patch("momu_agent.agents.reflection_agent.run_parallel_tools")
+async def test_tool_error_formatted_in_message(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    工具执行失败时，错误信息以 ❌ 格式写入 tool 消息，执行继续
+    """
+    agent = ReflectionAgent(
+        name="ToolAgent", llm=mock_llm, tool_registry=mock_registry, max_iterations=1
+    )
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {"expression": "1/0"},
+            "result": "division by zero",
+            "status": "error",
+        }
+    ]
+    mock_llm.invoke.side_effect = [
+        '[TOOL_CALL:calculator:{"expression": "1/0"}]',
+        "无法计算，发生了除零错误",
+        "无需改进",
+    ]
+
+    result = await agent.run("计算 1/0")
+
+    continuation_messages = mock_llm.invoke.call_args_list[1][0][0]
+    tool_msg = next(m for m in continuation_messages if m["role"] == "tool")
+    assert "❌" in tool_msg["content"]
+    assert result == "无法计算，发生了除零错误"
+
+
+@patch("momu_agent.agents.reflection_agent.run_parallel_tools")
+async def test_max_tool_iterations_in_single_call(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    单次 _call_llm 内 LLM 持续返回工具调用，达到 max_tool_iterations 后返回警告信息
+    """
+    agent = ReflectionAgent(
+        name="ToolAgent",
+        llm=mock_llm,
+        tool_registry=mock_registry,
+        max_iterations=1,
+        max_tool_iterations=2,
+    )
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {},
+            "result": "42",
+            "status": "success",
+        }
+    ]
+    # 初始生成连续 2 次工具调用（达到上限）→ 反思
+    mock_llm.invoke.side_effect = [
+        '[TOOL_CALL:calculator:{"expression": "1+1"}]',
+        '[TOOL_CALL:calculator:{"expression": "2+2"}]',
+        "无需改进",
+    ]
+
+    result = await agent.run("持续调用工具测试")
+
+    assert "已达到最大工具调用次数限制" in result
+    assert mock_run_parallel.call_count == 2
+
+
+@patch("momu_agent.agents.reflection_agent.run_parallel_tools")
+async def test_tool_called_during_refine_phase(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    优化阶段 LLM 也可以调用工具
+    """
+    agent = ReflectionAgent(
+        name="ToolAgent", llm=mock_llm, tool_registry=mock_registry, max_iterations=1
+    )
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {"expression": "100 * 0.8"},
+            "result": "80.0",
+            "status": "success",
+        }
+    ]
+    mock_llm.invoke.side_effect = [
+        "初始回答（未计算）",  # 初始生成
+        "需要精确计算折扣价格",  # 反思
+        '[TOOL_CALL:calculator:{"expression": "100 * 0.8"}]',  # 优化阶段调用工具
+        "折扣后价格为 80 元",  # 工具结果后的优化答案
+    ]
+
+    result = await agent.run("100 元打八折是多少？")
+
+    assert result == "折扣后价格为 80 元"
+    assert mock_run_parallel.call_count == 1

@@ -1,9 +1,14 @@
 """Reflection Agent 实现 — 自我反思与迭代优化的智能体"""
 
+from typing import Any
+
 from ..core.agent import Agent
 from ..core.llm import LLM
 from ..core.message import Message
+from ..tools.async_executor import run_parallel_tools
+from ..tools.registry import ToolRegistry
 from ..utils.logger import get_logger
+from .parser.tool_parser import ToolParser
 
 DEFAULT_PROMPTS: dict[str, str] = {
     "initial": """
@@ -87,7 +92,7 @@ class ReflectionAgent(Agent):
     3. 返回最终回答
 
     适合文档写作、代码生成、分析报告等需要迭代优化的任务。
-    不依赖外部工具，完全基于 LLM 推理能力。
+    支持可选的工具调用，在生成和优化阶段均可调用外部工具。
     """
 
     def __init__(
@@ -98,6 +103,8 @@ class ReflectionAgent(Agent):
         max_history_length: int = 100,
         max_iterations: int = 3,
         custom_prompts: dict[str, str] | None = None,
+        tool_registry: ToolRegistry | None = None,
+        max_tool_iterations: int = 3,
     ) -> None:
         """
         初始化 ReflectionAgent
@@ -109,6 +116,8 @@ class ReflectionAgent(Agent):
             max_history_length: 最大对话历史长度
             max_iterations: 最大反思迭代次数（默认 3）
             custom_prompts: 自定义提示词，支持 "initial"、"reflect"、"refine" 三个键
+            tool_registry: 工具注册表，用于生成和优化阶段的工具调用
+            max_tool_iterations: 每次 LLM 调用中最大工具调用轮次（默认 3）
         """
         super().__init__(
             name=name,
@@ -118,6 +127,9 @@ class ReflectionAgent(Agent):
         )
         self.max_iterations = max_iterations
         self.prompts = custom_prompts if custom_prompts else DEFAULT_PROMPTS
+        self.tool_registry = tool_registry
+        self.max_tool_iterations = max_tool_iterations
+        self.parser = ToolParser()
         self.memory = Memory()
 
     async def run(self, input_text: str, **kwargs) -> str:
@@ -181,7 +193,73 @@ class ReflectionAgent(Agent):
         self.add_message(Message(final_answer, "assistant"))
         return final_answer
 
+    def _build_tool_system_prompt(self) -> str:
+        """构建包含工具信息的系统提示词"""
+        if not self.tool_registry:
+            return "你是一个有用的AI助手。"
+        tools_description = self.tool_registry.get_tools_description()
+        return (
+            "你是一个有用的AI助手。在完成任务时，你可以使用以下工具：\n\n"
+            "<tools_definitions>\n"
+            "你必须严格根据以下工具列表来辅助完成任务。如果工具无法解决问题，请直接回答。\n"
+            f"工具列表:\n{tools_description}\n"
+            "</tools_definitions>" + self.parser.TOOL_CALL_PROTOCOL
+        )
+
+    @staticmethod
+    def _format_tool_result(res: dict[str, Any]) -> str:
+        """将单条工具执行结果格式化为可读字符串"""
+        if res.get("status") == "error":
+            return (
+                f"❌ 工具 {res['tool_name']} 执行失败：{res.get('result', '未知错误')}"
+            )
+        return f"🔧 工具 {res['tool_name']} 执行结果：\n{res.get('result', '无输出')}"
+
+    async def _invoke_with_tools(self, messages: list[dict[str, Any]], **kwargs) -> str:
+        """执行带工具调用循环的 LLM 调用"""
+        assert self.tool_registry is not None  # 调用方已确保非 None
+        for _ in range(self.max_tool_iterations):
+            result = await self.llm.invoke(messages, **kwargs) or ""
+            tool_calls = self.parser.extract_tool_calls(result)
+
+            if not tool_calls:
+                return result
+
+            self.logger.info(f"检测到 {len(tool_calls)} 个工具调用，正在执行...")
+            tasks = [
+                self.parser.prepare_tool_task(
+                    call["tool_name"], call["raw_params"], self.tool_registry
+                )
+                for call in tool_calls
+            ]
+            tool_results = await run_parallel_tools(
+                registry=self.tool_registry, tasks=tasks, timeout=30.0
+            )
+
+            clean_response = self.parser.strip_tool_calls(result, tool_calls)
+            messages.append({"role": "assistant", "content": clean_response})
+            for i, (call, res) in enumerate(zip(tool_calls, tool_results)):
+                messages.append(
+                    {
+                        "role": "tool",
+                        "content": self._format_tool_result(res),
+                        "tool_call_id": f"call_{hash(call['tool_name'] + str(i))}",
+                    }
+                )
+
+        self.logger.warning(
+            f"已达到最大工具调用次数 ({self.max_tool_iterations})，强制终止。"
+        )
+        return f"⚠️ 已达到最大工具调用次数限制 ({self.max_tool_iterations})"
+
     async def _call_llm(self, prompt: str, **kwargs) -> str:
-        """用单条用户消息调用 LLM，返回完整响应"""
-        messages = [{"role": "user", "content": prompt}]
-        return await self.llm.invoke(messages, **kwargs) or ""
+        """用单条用户消息调用 LLM（有工具注册表则运行工具调用循环）"""
+        if not self.tool_registry:
+            messages = [{"role": "user", "content": prompt}]
+            return await self.llm.invoke(messages, **kwargs) or ""
+
+        messages = [
+            {"role": "system", "content": self._build_tool_system_prompt()},
+            {"role": "user", "content": prompt},
+        ]
+        return await self._invoke_with_tools(messages, **kwargs)
