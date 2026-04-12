@@ -26,6 +26,7 @@ momu_agent/
 │       └── search.py      # 搜索工具（Tavily / SerpAPI）
 ├── agents/             # Agent 实现
 │   ├── simple_agent.py # SimpleAgent（async，支持工具调用和流式输出）
+│   ├── react_agent.py  # ReActAgent（Thought → Action → Observation 循环）
 │   └── parser/
 │       └── tool_parser.py # 工具调用解析器
 └── utils/
@@ -42,6 +43,7 @@ uv sync --frozen --all-extras
 
 # 运行示例
 uv run python examples/simple_agent_demo.py
+uv run python examples/react_agent_demo.py
 
 # 运行所有测试
 uv run pytest
