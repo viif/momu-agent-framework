@@ -80,7 +80,14 @@ class TestAsyncToolExecutor:
             {"tool_name": "weather", "input_data": "bj"},
         ]
 
-        self.mock_registry.execute_tool.side_effect = ["res1", "res2", "res3"]
+        result_map = {
+            ("search", "q1"): "res1",
+            ("calc", "1+1"): "res2",
+            ("weather", "bj"): "res3",
+        }
+        self.mock_registry.execute_tool.side_effect = lambda name, data: result_map[
+            (name, data)
+        ]
 
         executor = AsyncToolExecutor(self.mock_registry)
         results = await executor.execute_tools_parallel(tasks)
@@ -143,7 +150,14 @@ class TestConvenienceFunctions:
     async def test_run_parallel_tools(self):
         """测试 run_parallel_tools 函数"""
         mock_registry = Mock()
-        mock_registry.execute_tool.side_effect = ["data_A", "data_B", "data_C"]
+        result_map = {
+            ("search", "query_A"): "data_A",
+            ("search", "query_B"): "data_B",
+            ("calculator", "1+1"): "data_C",
+        }
+        mock_registry.execute_tool.side_effect = lambda name, data: result_map[
+            (name, data)
+        ]
 
         tasks = [
             {"tool_name": "search", "input_data": "query_A"},
@@ -171,7 +185,10 @@ class TestConvenienceFunctions:
     def test_run_parallel_tools_sync(self):
         """测试同步包装函数"""
         mock_registry = Mock()
-        mock_registry.execute_tool.side_effect = ["sync_A", "sync_B"]
+        result_map = {("test", "input_1"): "sync_A", ("test", "input_2"): "sync_B"}
+        mock_registry.execute_tool.side_effect = lambda name, data: result_map[
+            (name, data)
+        ]
 
         tasks = [
             {"tool_name": "test", "input_data": "input_1"},
@@ -191,7 +208,13 @@ class TestConvenienceFunctions:
     async def test_run_batch_tool_async(self):
         """测试异步 run_batch_tool 函数"""
         mock_registry = Mock()
-        mock_registry.execute_tool.side_effect = ["result_1", "result_2"]
+        result_map = {
+            ("search", "query_A"): "result_1",
+            ("search", "query_B"): "result_2",
+        }
+        mock_registry.execute_tool.side_effect = lambda name, data: result_map[
+            (name, data)
+        ]
 
         results = await run_batch_tool(
             mock_registry,
