@@ -71,7 +71,7 @@ class ToolChain:
                     raise ToolException(f"模板变量缺失: {e}")
 
                 self.logger.info(f"🔧 步骤 {i}/{len(self.steps)}: 调用 [{tool_name}]")
-                self.logger.debug(f"🔧 输入预览: {tool_input[:50]}...") # 调试用
+                self.logger.debug(f"🔧 输入预览: {tool_input[:50]}...")  # 调试用
 
                 try:
                     result = registry.execute_tool(tool_name, tool_input)
