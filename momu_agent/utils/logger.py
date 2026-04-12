@@ -50,7 +50,9 @@ def setup_logger(
 
     handler = logging.StreamHandler(sys.stdout)
 
-    default_format = "%(levelname)-8s %(asctime)s - %(name)s - %(message)s"
+    default_format = (
+        "%(levelname)-8s %(asctime)s - %(name)s - %(filename)s:%(lineno)d - %(message)s"
+    )
 
     formatter = ColoredFormatter(
         format_string or default_format, datefmt="%Y-%m-%d %H:%M:%S"
@@ -73,9 +75,11 @@ def get_logger(name: str = "momu_agent") -> logging.Logger:
 
     if not _has_setup and not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
+
         formatter = ColoredFormatter(
-            "%(levelname)-8s %(asctime)s - %(name)s - %(message)s"
+            "%(levelname)-8s %(asctime)s - %(name)s - %(filename)s:%(lineno)d - %(message)s"
         )
+
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(logging.WARNING)
