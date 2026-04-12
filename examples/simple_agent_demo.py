@@ -10,6 +10,8 @@ SimpleAgent 使用示例
   cp .env.example .env
 """
 
+import asyncio
+
 from momu_agent.agents import SimpleAgent
 from momu_agent.core.config import Config
 from momu_agent.core.llm import LLM
@@ -30,7 +32,7 @@ def build_llm(config: Config) -> LLM:
 
 
 # ---------- 示例 1：基础对话（无工具） ----------
-def demo_basic_chat(config: Config):
+async def demo_basic_chat(config: Config):
     print("=" * 50)
     print("示例 1：基础对话（无工具）")
     print("=" * 50)
@@ -42,16 +44,16 @@ def demo_basic_chat(config: Config):
         max_history_length=config.max_history_length,
     )
 
-    response = agent.run("你好！请用一句话介绍一下你自己。")
+    response = await agent.run("你好！请用一句话介绍一下你自己。")
     print(f"Agent: {response}\n")
 
     # 多轮对话：历史记录会自动保留
-    response = agent.run("上一个问题我问了什么？")
+    response = await agent.run("上一个问题我问了什么？")
     print(f"Agent: {response}\n")
 
 
 # ---------- 示例 2：带工具调用的对话 ----------
-def demo_with_tools(config: Config):
+async def demo_with_tools(config: Config):
     print("=" * 50)
     print("示例 2：带工具调用（计算器）")
     print("=" * 50)
@@ -73,12 +75,12 @@ def demo_with_tools(config: Config):
     ]
     for q in questions:
         print(f"用户: {q}")
-        response = agent.run(q, max_tool_iterations=3)
+        response = await agent.run(q, max_tool_iterations=3)
         print(f"Agent: {response}\n")
 
 
 # ---------- 示例 3：流式输出 ----------
-def demo_stream(config: Config):
+async def demo_stream(config: Config):
     print("=" * 50)
     print("示例 3：流式输出")
     print("=" * 50)
@@ -92,18 +94,22 @@ def demo_stream(config: Config):
 
     print("用户: 请用三句话讲一个关于机器人的小故事。")
     print("Agent: ", end="", flush=True)
-    for chunk in agent.stream_run("请用三句话讲一个关于机器人的小故事。"):
+    async for chunk in agent.stream_run("请用三句话讲一个关于机器人的小故事。"):
         print(chunk, end="", flush=True)
     print("\n")
 
 
-if __name__ == "__main__":
+async def main():
     # 从项目根目录的 .env 文件加载配置
     config = Config.from_env()
 
     # 按配置初始化日志级别
     setup_logger(level=config.log_level)
 
-    demo_basic_chat(config)
-    demo_with_tools(config)
-    demo_stream(config)
+    await demo_basic_chat(config)
+    await demo_with_tools(config)
+    await demo_stream(config)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
