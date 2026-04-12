@@ -12,6 +12,12 @@ from momu_agent.core.exceptions import ConfigException
 class TestConfig:
     """测试 Config 类"""
 
+    @pytest.fixture(autouse=True)
+    def mock_load_dotenv(self):
+        """阻止 Config.from_env() 内部的 load_dotenv 读取真实 .env 文件"""
+        with patch("momu_agent.core.config.load_dotenv"):
+            yield
+
     def _mock_env(self, **kwargs):
         """
         辅助方法：模拟环境变量
