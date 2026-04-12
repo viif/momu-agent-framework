@@ -85,7 +85,9 @@ async def demo_with_search(config: Config):
     print("=" * 50)
 
     if not config.tavily_api_key and not config.serpapi_api_key:
-        print("⚠️  未配置搜索 API Key（TAVILY_API_KEY / SERPAPI_API_KEY），跳过此示例。\n")
+        print(
+            "⚠️  未配置搜索 API Key（TAVILY_API_KEY / SERPAPI_API_KEY），跳过此示例。\n"
+        )
         return
 
     registry = ToolRegistry()
