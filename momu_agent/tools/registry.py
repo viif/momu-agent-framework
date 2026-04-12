@@ -89,7 +89,11 @@ class ToolRegistry:
             tool = self._tools[name]
             try:
                 # 若 input_text 已经是解析好的参数字典，直接传入；否则包装为 {"input": ...}
-                params = input_text if isinstance(input_text, dict) else {"input": input_text}
+                params = (
+                    input_text
+                    if isinstance(input_text, dict)
+                    else {"input": input_text}
+                )
                 return tool.run(params)
             except ToolException as e:
                 self.logger.error(f"🔧 工具 '{name}' 执行失败: {e}")
