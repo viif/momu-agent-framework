@@ -8,9 +8,7 @@ from momu_agent.core.llm import LLM
 
 def test_initialization_success():
     """测试 LLM 初始化成功"""
-    llm = LLM(
-        model="qwen-turbo", api_key="test_key", base_url="http://test_url"
-    )
+    llm = LLM(model="qwen-turbo", api_key="test_key", base_url="http://test_url")
     assert llm.model == "qwen-turbo"
     assert llm.api_key == "test_key"
 
