@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from momu_agent.core.exceptions import ToolException
-from momu_agent.tools.chain import ToolChain, ToolChainManager
+from momu_agent.tools.chain import ChainStep, ToolChain, ToolChainManager
 
 
 class TestToolChain:
@@ -18,14 +18,15 @@ class TestToolChain:
         self.chain.add_step("search", "{input}")
 
         assert len(self.chain.steps) == 1
-        assert self.chain.steps[0]["tool_name"] == "search"
-        assert self.chain.steps[0]["output_key"] == "step_0_result"
+        assert isinstance(self.chain.steps[0], ChainStep)
+        assert self.chain.steps[0].tool_name == "search"
+        assert self.chain.steps[0].output_key == "step_0_result"
 
     def test_add_step_custom_output_key(self):
         """测试添加步骤时使用自定义 output_key"""
         self.chain.add_step("search", "{input}", output_key="my_result")
 
-        assert self.chain.steps[0]["output_key"] == "my_result"
+        assert self.chain.steps[0].output_key == "my_result"
 
     def test_execute_success(self):
         """测试工具链成功执行"""
@@ -41,6 +42,13 @@ class TestToolChain:
         assert mock_registry.execute_tool.call_count == 2
         mock_registry.execute_tool.assert_any_call("search", "查询内容")
         mock_registry.execute_tool.assert_any_call("calculator", "计算: 搜索结果")
+
+    def test_execute_empty_chain_raises(self):
+        """测试执行空工具链时抛出异常"""
+        mock_registry = Mock()
+
+        with pytest.raises(ToolException, match="没有任何步骤"):
+            self.chain.execute(mock_registry, "input")
 
     def test_execute_missing_template_variable(self):
         """测试模板变量缺失时抛出异常"""
