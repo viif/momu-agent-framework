@@ -85,6 +85,26 @@ class TestConfig:
                 Config.from_env()
             assert "LLM_BASE_URL" in str(exc_info.value)
 
+    def test_from_env_search_keys_optional(self):
+        """测试搜索 Key 是可选的，不配置时默认为 None"""
+        # 只提供 LLM 相关的 Key，不提供搜索 Key
+        with self._mock_env():
+            config = Config.from_env()
+
+            assert config.tavily_api_key is None
+            assert config.serpapi_api_key is None
+
+    def test_from_env_with_search_keys(self):
+        """测试读取搜索工具的 API Key"""
+        with self._mock_env(
+            TAVILY_API_KEY="your_tavily_api_key_here",
+            SERPAPI_API_KEY="your_serpapi_api_key_here",
+        ):
+            config = Config.from_env()
+
+            assert config.tavily_api_key == "your_tavily_api_key_here"
+            assert config.serpapi_api_key == "your_serpapi_api_key_here"
+
     def test_to_dict(self):
         """测试转换为字典格式"""
         with self._mock_env():

@@ -9,6 +9,8 @@ dependencies = [
     "openai>=2.31.0",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.2",
+    "serpapi>=1.0.2",
+    "tavily-python>=0.7.23",
 ]
 
 [tool.setuptools.packages.find]

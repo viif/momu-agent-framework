@@ -26,6 +26,10 @@ class Config(BaseModel):
     # 其他配置
     max_history_length: int = 100
 
+    # 搜索工具配置
+    tavily_api_key: Optional[str] = None
+    serpapi_api_key: Optional[str] = None
+
     @classmethod
     def from_env(cls, dotenv_path: Optional[str] = None) -> "Config":
         """从环境变量创建配置"""
@@ -52,6 +56,8 @@ class Config(BaseModel):
             max_tokens=int(max_tokens_env) if max_tokens_env is not None else None,
             timeout=float(os.getenv("TIMEOUT", "60.0")),
             max_history_length=int(os.getenv("MAX_HISTORY_LENGTH", "100")),
+            tavily_api_key=os.getenv("TAVILY_API_KEY"),
+            serpapi_api_key=os.getenv("SERPAPI_API_KEY"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
