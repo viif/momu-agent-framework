@@ -16,7 +16,7 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["momu_agent*"]
-exclude = ["tests*"]
+exclude = ["tests*", "examples*"]
 
 [dependency-groups]
 dev = [
