@@ -8,6 +8,7 @@ from .core.llm import MomuAgentLLM
 from .core.message import Message
 from .tools.builtin.calculator import CalculatorTool, calculate
 from .tools.builtin.search import SearchTool, search
+from .tools.chain import ToolChain, ToolChainManager
 from .tools.registry import ToolRegistry, global_registry
 
 __all__ = [
@@ -19,6 +20,8 @@ __all__ = [
     "calculate",
     "SearchTool",
     "search",
+    "ToolChain",
+    "ToolChainManager",
     "ToolRegistry",
     "global_registry",
 ]
