@@ -79,5 +79,5 @@ class TestCalculatorTool:
         """测试获取参数定义"""
         params = calculator.get_parameters()
         assert len(params) == 1
-        assert params[0].name == "input"
+        assert params[0].name == "expression"
         assert params[0].required is True

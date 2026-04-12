@@ -117,7 +117,7 @@ class CalculatorTool(Tool):
 
         return [
             ToolParameter(
-                name="input",
+                name="expression",
                 type="string",
                 description="要计算的数学表达式，支持基本运算和数学函数",
                 required=True,
