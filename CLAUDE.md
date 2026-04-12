@@ -4,7 +4,33 @@
 
 ## 项目概述
 
-`momu-agent-framework` 是基于 HelloAgents 框架构建的智能体框架。项目处于早期阶段，`momu_agent/` 是主包。
+`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，提供了完整的 Agent、工具系统和 LLM 接入能力。
+
+## 包结构
+
+```
+momu_agent/
+├── core/               # 核心模块
+│   ├── agent.py        # Agent 抽象基类
+│   ├── config.py       # 配置管理（从 .env 加载）
+│   ├── exceptions.py   # 异常定义
+│   ├── llm.py          # LLM 封装（OpenAI 兼容接口）
+│   └── message.py      # 消息数据结构
+├── tools/              # 工具系统
+│   ├── base.py         # Tool 抽象基类、ToolParameter
+│   ├── registry.py     # ToolRegistry（支持 Tool 对象和函数两种注册方式）
+│   ├── chain.py        # ToolChain / ToolChainManager（顺序工具链）
+│   ├── async_executor.py # 异步并发工具执行器
+│   └── builtin/        # 内置工具
+│       ├── calculator.py  # 计算器工具
+│       └── search.py      # 搜索工具（Tavily / SerpAPI）
+├── agents/             # Agent 实现
+│   ├── simple_agent.py # SimpleAgent（支持工具调用和流式输出）
+│   └── parser/
+│       └── tool_parser.py # 工具调用解析器
+└── utils/
+    └── logger.py       # 日志工具
+```
 
 ## 常用命令
 
@@ -14,14 +40,14 @@
 # 安装依赖
 uv sync --frozen --all-extras
 
-# 运行应用
-uv run python main.py
+# 运行示例
+uv run python examples/simple_agent_demo.py
 
 # 运行所有测试
 uv run pytest
 
 # 运行单个测试
-uv run pytest tests/test_dummy.py::test_true_is_true
+uv run pytest tests/agents/test_simple_agent.py
 
 # 检查代码风格（不修改）
 uv run ruff check .
@@ -31,6 +57,24 @@ uv run ruff format --check .
 uv run ruff check --fix .
 uv run ruff format .
 ```
+
+## 配置
+
+运行前需从 `.env.example` 复制并填写 `.env`：
+
+```bash
+cp .env.example .env
+```
+
+必填环境变量：
+
+| 变量 | 说明 |
+|------|------|
+| `LLM_MODEL_ID` | 模型 ID，如 `qwen-turbo` |
+| `LLM_API_KEY` | API 密钥 |
+| `LLM_BASE_URL` | API 基础 URL（OpenAI 兼容） |
+
+可选环境变量：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`。
 
 ## 代码风格
 
