@@ -146,3 +146,101 @@ def test_enhanced_system_prompt(mock_llm, mock_registry):
     assert "### 工具调用协议 ###" in prompt
     assert "search: 搜索工具" in prompt
     assert "你是一个有用的AI助手。" in prompt
+
+
+@patch("momu_agent.agents.simple_agent.run_parallel_tools")
+async def test_agent_parallel_tool_calls(mock_run_parallel, mock_llm, mock_registry):
+    """
+    测试 LLM 一次性输出多个工具调用时，全部并发执行
+    """
+    # Arrange
+    agent = SimpleAgent(name="TestAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    mock_llm.invoke.side_effect = [
+        '[TOOL_CALL:search:{"query": "北京天气"}][TOOL_CALL:search:{"query": "上海天气"}]',
+        "北京晴，上海雨。",
+    ]
+    mock_run_parallel.return_value = [
+        {"task_id": 0, "tool_name": "search", "input_data": {}, "result": "北京晴", "status": "success"},
+        {"task_id": 1, "tool_name": "search", "input_data": {}, "result": "上海雨", "status": "success"},
+    ]
+
+    # Act
+    response = await agent.run("查询北京和上海天气")
+
+    # Assert
+    assert "北京晴" in response
+    assert "上海雨" in response
+    # 验证 run_parallel_tools 收到了两个任务
+    call_args = mock_run_parallel.call_args
+    tasks = call_args.kwargs["tasks"]
+    assert len(tasks) == 2
+
+
+@patch("momu_agent.agents.simple_agent.run_parallel_tools")
+async def test_agent_tool_execution_error(mock_run_parallel, mock_llm, mock_registry):
+    """
+    测试工具执行失败时，错误信息以 tool 消息传给 LLM，LLM 给出最终回答
+    """
+    # Arrange
+    agent = SimpleAgent(name="TestAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    mock_llm.invoke.side_effect = [
+        '[TOOL_CALL:search:{"query": "上海天气"}]',
+        "工具执行失败，无法获取天气信息。",
+    ]
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "search",
+            "input_data": {},
+            "result": "连接超时",
+            "status": "error",
+        }
+    ]
+
+    # Act
+    response = await agent.run("上海天气？")
+
+    # Assert
+    assert "无法获取天气" in response
+    assert mock_llm.invoke.call_count == 2
+    # 验证 LLM 第二次调用时收到了包含错误信息的 tool 消息
+    second_call_messages = mock_llm.invoke.call_args_list[1][0][0]
+    tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
+    assert len(tool_messages) == 1
+    assert "执行失败" in tool_messages[0]["content"]
+    assert "连接超时" in tool_messages[0]["content"]
+
+
+async def test_agent_history_accumulates_across_runs(mock_llm):
+    """
+    测试多次调用 run() 后，历史记录正确累积（无工具模式）
+    """
+    # Arrange
+    mock_llm.invoke.return_value = "好的。"
+    agent = SimpleAgent(name="TestAgent", llm=mock_llm)
+
+    # Act & Assert
+    await agent.run("第一条消息")
+    assert len(agent._history) == 2  # user + assistant
+
+    await agent.run("第二条消息")
+    assert len(agent._history) == 4  # 上一轮 2 条 + 本轮 2 条
+
+
+def test_agent_custom_system_prompt(mock_llm, mock_registry):
+    """
+    测试自定义 system_prompt 在有工具时被正确保留在增强提示词中
+    """
+    agent = SimpleAgent(
+        name="TestAgent",
+        llm=mock_llm,
+        system_prompt="你是专业气象顾问。",
+        tool_registry=mock_registry,
+    )
+    prompt = agent._get_enhanced_system_prompt()
+
+    assert "你是专业气象顾问。" in prompt
+    assert "search: 搜索工具" in prompt
+    assert "### 工具调用协议 ###" in prompt

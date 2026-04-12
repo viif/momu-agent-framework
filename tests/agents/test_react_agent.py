@@ -183,3 +183,98 @@ Action: [TOOL_CALL:search:{"query": "loop"}]"""
     assert mock_llm.invoke.call_count == 2  # 严格等于 max_steps
     assert "已达到最大步数" in response
     assert "Finish" not in response
+
+
+def test_react_prompt_construction(mock_llm, mock_registry):
+    """
+    测试：验证 Agent 初始化及默认参数是否正确
+    """
+    agent = ReActAgent(name="PromptAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    assert agent.tool_registry == mock_registry
+    assert agent.max_steps == 5  # 默认值
+
+
+@patch("momu_agent.agents.react_agent.run_parallel_tools")
+async def test_react_tool_error_in_observation(mock_run_parallel, mock_llm, mock_registry):
+    """
+    测试：工具执行失败时，错误信息写入 Observation 并出现在下一步的 step prompt 中
+    """
+    # Arrange
+    agent = ReActAgent(
+        name="ErrorAgent", llm=mock_llm, tool_registry=mock_registry, max_steps=5
+    )
+
+    response_step_1 = """Thought: 需要搜索天气。
+Action: [TOOL_CALL:search:{"query": "上海天气"}]"""
+
+    response_step_2 = """Thought: 工具失败了，直接给出回答。
+Action: Finish[无法获取天气，请稍后再试]"""
+
+    mock_llm.invoke.side_effect = [response_step_1, response_step_2]
+    mock_run_parallel.return_value = [
+        {"status": "error", "result": "网络超时", "tool_name": "search"}
+    ]
+
+    # Act
+    response = await agent.run("上海天气？")
+
+    # Assert
+    assert "无法获取天气" in response
+    assert mock_llm.invoke.call_count == 2
+
+    # 验证第二步的 step prompt 包含工具执行失败的 Observation
+    second_call_messages = mock_llm.invoke.call_args_list[1][0][0]
+    step_prompt_content = second_call_messages[1]["content"]
+    assert "执行失败" in step_prompt_content
+    assert "网络超时" in step_prompt_content
+
+
+async def test_react_empty_llm_response(mock_llm, mock_registry):
+    """
+    测试：LLM 返回空响应时，Agent 捕获异常并返回错误信息，不继续循环
+    """
+    # Arrange
+    agent = ReActAgent(name="EmptyAgent", llm=mock_llm, tool_registry=mock_registry)
+    mock_llm.invoke.return_value = ""
+
+    # Act
+    response = await agent.run("测试空响应")
+
+    # Assert
+    assert "执行错误" in response
+    assert mock_llm.invoke.call_count == 1  # 失败后不再重试
+
+
+async def test_react_invalid_action(mock_llm, mock_registry):
+    """
+    测试：LLM 输出的 Action 既不是 Finish 也不含合法工具调用时，返回错误
+    """
+    # Arrange
+    agent = ReActAgent(name="InvalidAgent", llm=mock_llm, tool_registry=mock_registry)
+    mock_llm.invoke.return_value = """Thought: 我不知道该怎么办。
+Action: 随便说了一句话"""
+
+    # Act
+    response = await agent.run("测试无效动作")
+
+    # Assert
+    assert "执行错误" in response
+    assert mock_llm.invoke.call_count == 1
+
+
+async def test_react_no_tool_registry(mock_llm):
+    """
+    测试：没有工具注册表时，LLM 尝试调用工具应捕获断言错误并返回错误信息
+    """
+    # Arrange
+    agent = ReActAgent(name="NoRegistryAgent", llm=mock_llm, tool_registry=None)
+    mock_llm.invoke.return_value = """Thought: 需要搜索。
+Action: [TOOL_CALL:search:{"query": "test"}]"""
+
+    # Act
+    response = await agent.run("测试无注册表")
+
+    # Assert
+    assert "执行错误" in response
+    assert mock_llm.invoke.call_count == 1
