@@ -3,7 +3,7 @@
 from .agent import Agent
 from .config import Config
 from .exceptions import MomuAgentException
-from .llm import MomuAgentLLM
+from .llm import LLM
 from .message import Message
 
-__all__ = ["MomuAgentLLM", "MomuAgentException", "Config", "Message", "Agent"]
+__all__ = ["LLM", "MomuAgentException", "Config", "Message", "Agent"]

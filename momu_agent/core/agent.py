@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from ..utils.logger import get_logger
-from .llm import MomuAgentLLM
+from .llm import LLM
 from .message import Message
 
 
@@ -14,7 +14,7 @@ class Agent(ABC):
     def __init__(
         self,
         name: str,
-        llm: MomuAgentLLM,
+        llm: LLM,
         system_prompt: Optional[str] = None,
         max_history_length: int = 100,
     ):

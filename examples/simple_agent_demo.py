@@ -12,14 +12,14 @@ SimpleAgent 使用示例
 
 from momu_agent.agents import SimpleAgent
 from momu_agent.core.config import Config
-from momu_agent.core.llm import MomuAgentLLM
+from momu_agent.core.llm import LLM
 from momu_agent.tools.builtin.calculator import CalculatorTool
 from momu_agent.tools.registry import ToolRegistry
 from momu_agent.utils.logger import setup_logger
 
 
-def build_llm(config: Config) -> MomuAgentLLM:
-    return MomuAgentLLM(
+def build_llm(config: Config) -> LLM:
+    return LLM(
         model=config.model_id,
         api_key=config.api_key,
         base_url=config.base_url,

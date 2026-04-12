@@ -3,12 +3,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from momu_agent.core.exceptions import LLMException
-from momu_agent.core.llm import MomuAgentLLM
+from momu_agent.core.llm import LLM
 
 
 def test_initialization_success():
     """测试 LLM 初始化成功"""
-    llm = MomuAgentLLM(
+    llm = LLM(
         model="qwen-turbo", api_key="test_key", base_url="http://test_url"
     )
     assert llm.model == "qwen-turbo"
@@ -18,7 +18,7 @@ def test_initialization_success():
 def test_initialization_missing_params():
     """测试缺少必填参数时抛出异常"""
     with pytest.raises(LLMException):
-        MomuAgentLLM(model="", api_key="key", base_url="url")
+        LLM(model="", api_key="key", base_url="url")
 
 
 @pytest.mark.asyncio
@@ -33,7 +33,7 @@ async def test_invoke(mock_async_openai_class):
 
     mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-    llm = MomuAgentLLM(model="test", api_key="key", base_url="url")
+    llm = LLM(model="test", api_key="key", base_url="url")
 
     response = await llm.invoke([{"role": "user", "content": "hi"}])
 
@@ -62,7 +62,7 @@ async def test_think_stream(mock_async_openai_class):
 
     mock_client.chat.completions.create = AsyncMock(return_value=mock_stream)
 
-    llm = MomuAgentLLM(model="test", api_key="key", base_url="url")
+    llm = LLM(model="test", api_key="key", base_url="url")
 
     chunks = []
     async for chunk in llm.think([{"role": "user", "content": "hi"}]):

@@ -10,7 +10,7 @@
 - **并发执行** — `AsyncToolExecutor` 异步并发调用多个工具
 - **流式输出** — `SimpleAgent.stream_run` 支持逐 token 流式响应
 - **内置工具** — 计算器（`CalculatorTool`）、搜索（Tavily / SerpAPI）
-- **OpenAI 兼容** — `MomuAgentLLM` 接入任何兼容 OpenAI 接口的模型
+- **OpenAI 兼容** — `LLM` 接入任何兼容 OpenAI 接口的模型
 
 ## 安装
 
@@ -43,10 +43,10 @@ LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```python
 from momu_agent.agents import SimpleAgent
 from momu_agent.core.config import Config
-from momu_agent.core.llm import MomuAgentLLM
+from momu_agent.core.llm import LLM
 
 config = Config.from_env()
-llm = MomuAgentLLM(
+llm = LLM(
     model=config.model_id,
     api_key=config.api_key,
     base_url=config.base_url,

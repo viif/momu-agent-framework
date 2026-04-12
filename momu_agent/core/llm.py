@@ -7,7 +7,7 @@ from ..utils.logger import get_logger
 from .exceptions import LLMException
 
 
-class MomuAgentLLM:
+class LLM:
     """
     MomuAgent 统一 LLM 接口
     """

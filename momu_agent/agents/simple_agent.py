@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from ..core.agent import Agent
 from ..core.exceptions import AgentException
-from ..core.llm import MomuAgentLLM
+from ..core.llm import LLM
 from ..core.message import Message
 from ..tools.async_executor import run_parallel_tools
 from ..tools.registry import ToolRegistry
@@ -20,7 +20,7 @@ class SimpleAgent(Agent):
     def __init__(
         self,
         name: str,
-        llm: MomuAgentLLM,
+        llm: LLM,
         system_prompt: Optional[str] = None,
         tool_registry: Optional["ToolRegistry"] = None,
         max_history_length: int = 100,
