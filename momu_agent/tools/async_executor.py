@@ -2,7 +2,7 @@
 
 import asyncio
 import concurrent.futures
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..core.exceptions import ToolException
 from ..utils.logger import get_logger
@@ -16,7 +16,7 @@ class AsyncToolExecutor:
         self,
         registry: ToolRegistry,
         max_workers: int = 4,
-        default_timeout: Optional[float] = None,
+        default_timeout: float | None = None,
     ):
         """
         初始化执行器
@@ -34,7 +34,7 @@ class AsyncToolExecutor:
         self.logger.info(f"🔧 异步工具执行器已初始化 (超时限制: {default_timeout}s)")
 
     async def execute_tool_async(
-        self, tool_name: str, input_data: str, timeout: Optional[float] = None
+        self, tool_name: str, input_data: str, timeout: float | None = None
     ) -> str:
         """
         异步执行单个工具
@@ -83,8 +83,8 @@ class AsyncToolExecutor:
             raise ToolException(f"工具执行错误 [{tool_name}]: {str(e)}")
 
     async def execute_tools_parallel(
-        self, tasks: List[Dict[str, str]], timeout: Optional[float] = None
-    ) -> List[Dict[str, Any]]:
+        self, tasks: list[dict[str, str]], timeout: float | None = None
+    ) -> list[dict[str, Any]]:
         """
         并行执行多个工具
 
@@ -172,8 +172,8 @@ class AsyncToolExecutor:
         return results
 
     async def execute_tools_batch(
-        self, tool_name: str, input_list: List[str], timeout: Optional[float] = None
-    ) -> List[Dict[str, Any]]:
+        self, tool_name: str, input_list: list[str], timeout: float | None = None
+    ) -> list[dict[str, Any]]:
         """批量执行同一个工具"""
         tasks = [
             {"tool_name": tool_name, "input_data": input_data}
@@ -203,10 +203,10 @@ class AsyncToolExecutor:
 # 便捷函数
 async def run_parallel_tools(
     registry: ToolRegistry,
-    tasks: List[Dict[str, str]],
+    tasks: list[dict[str, str]],
     max_workers: int = 4,
-    timeout: Optional[float] = None,
-) -> List[Dict[str, Any]]:
+    timeout: float | None = None,
+) -> list[dict[str, Any]]:
     async with AsyncToolExecutor(registry, max_workers, timeout) as executor:
         return await executor.execute_tools_parallel(tasks, timeout=timeout)
 
@@ -214,10 +214,10 @@ async def run_parallel_tools(
 async def run_batch_tool(
     registry: ToolRegistry,
     tool_name: str,
-    input_list: List[str],
+    input_list: list[str],
     max_workers: int = 4,
-    timeout: Optional[float] = None,
-) -> List[Dict[str, Any]]:
+    timeout: float | None = None,
+) -> list[dict[str, Any]]:
     async with AsyncToolExecutor(registry, max_workers, timeout) as executor:
         return await executor.execute_tools_batch(
             tool_name, input_list, timeout=timeout
@@ -227,20 +227,20 @@ async def run_batch_tool(
 # 同步包装函数
 def run_parallel_tools_sync(
     registry: ToolRegistry,
-    tasks: List[Dict[str, str]],
+    tasks: list[dict[str, str]],
     max_workers: int = 4,
-    timeout: Optional[float] = None,
-) -> List[Dict[str, Any]]:
+    timeout: float | None = None,
+) -> list[dict[str, Any]]:
     return asyncio.run(run_parallel_tools(registry, tasks, max_workers, timeout))
 
 
 def run_batch_tool_sync(
     registry: ToolRegistry,
     tool_name: str,
-    input_list: List[str],
+    input_list: list[str],
     max_workers: int = 4,
-    timeout: Optional[float] = None,
-) -> List[Dict[str, Any]]:
+    timeout: float | None = None,
+) -> list[dict[str, Any]]:
     return asyncio.run(
         run_batch_tool(registry, tool_name, input_list, max_workers, timeout)
     )

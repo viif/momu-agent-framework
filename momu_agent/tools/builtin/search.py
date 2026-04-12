@@ -1,6 +1,6 @@
 """搜索工具"""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from serpapi import Client as GoogleSearchClient
 from tavily import TavilyClient
@@ -23,8 +23,8 @@ class SearchTool(Tool):
     def __init__(
         self,
         backend: str = "hybrid",
-        tavily_api_key: Optional[str] = None,
-        serpapi_key: Optional[str] = None,
+        tavily_api_key: str | None = None,
+        serpapi_key: str | None = None,
     ):
         super().__init__(
             name="search",
@@ -38,8 +38,8 @@ class SearchTool(Tool):
         self.serpapi_key = serpapi_key
         self.available_backends = []
 
-        self.tavily_client: Optional[TavilyClient] = None
-        self.serpapi_client: Optional[GoogleSearchClient] = None
+        self.tavily_client: TavilyClient | None = None
+        self.serpapi_client: GoogleSearchClient | None = None
 
         self._setup_backends()
         self._init_clients()
@@ -93,7 +93,7 @@ class SearchTool(Tool):
             self.serpapi_client = GoogleSearchClient(api_key=self.serpapi_key)
             self.logger.debug("🔧 SerpApi 客户端已初始化")
 
-    def run(self, parameters: Dict[str, Any]) -> str:
+    def run(self, parameters: dict[str, Any]) -> str:
         """
         执行搜索
 
@@ -195,7 +195,7 @@ class SearchTool(Tool):
 
         return f"对不起，没有找到关于 '{query}' 的信息。"
 
-    def get_parameters(self) -> List[ToolParameter]:
+    def get_parameters(self) -> list[ToolParameter]:
         """获取工具参数定义"""
         return [
             ToolParameter(

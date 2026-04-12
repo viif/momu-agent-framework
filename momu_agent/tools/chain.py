@@ -1,6 +1,6 @@
 """工具链管理"""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..core.exceptions import ToolException
 from ..utils.logger import get_logger
@@ -13,12 +13,12 @@ class ToolChain:
     def __init__(self, name: str, description: str):
         self.name = name
         self.description = description
-        self.steps: List[Dict[str, Any]] = []
+        self.steps: list[dict[str, Any]] = []
 
         self.logger = get_logger(__name__)
 
     def add_step(
-        self, tool_name: str, input_template: str, output_key: Optional[str] = None
+        self, tool_name: str, input_template: str, output_key: str | None = None
     ):
         """
         添加工具执行步骤
@@ -40,7 +40,7 @@ class ToolChain:
         self,
         registry: ToolRegistry,
         initial_input: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """
         执行工具链
@@ -98,7 +98,7 @@ class ToolChainManager:
 
     def __init__(self, registry: ToolRegistry):
         self.registry = registry
-        self.chains: Dict[str, ToolChain] = {}
+        self.chains: dict[str, ToolChain] = {}
 
         self.logger = get_logger(__name__)
 
@@ -110,7 +110,7 @@ class ToolChainManager:
         self.logger.info(f"🔧 工具链 '{chain.name}' 已注册")
 
     def execute_chain(
-        self, chain_name: str, input_data: str, context: Optional[Dict[str, Any]] = None
+        self, chain_name: str, input_data: str, context: dict[str, Any] | None = None
     ) -> str:
         """执行指定的工具链"""
         if chain_name not in self.chains:
@@ -122,6 +122,6 @@ class ToolChainManager:
         chain = self.chains[chain_name]
         return chain.execute(self.registry, input_data, context)
 
-    def list_chains(self) -> List[str]:
+    def list_chains(self) -> list[str]:
         """列出所有工具链名称"""
         return list(self.chains.keys())

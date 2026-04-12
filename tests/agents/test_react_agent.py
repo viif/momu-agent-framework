@@ -196,7 +196,9 @@ def test_react_prompt_construction(mock_llm, mock_registry):
 
 
 @patch("momu_agent.agents.react_agent.run_parallel_tools")
-async def test_react_tool_error_in_observation(mock_run_parallel, mock_llm, mock_registry):
+async def test_react_tool_error_in_observation(
+    mock_run_parallel, mock_llm, mock_registry
+):
     """
     测试：工具执行失败时，错误信息写入 Observation 并出现在下一步的 step prompt 中
     """

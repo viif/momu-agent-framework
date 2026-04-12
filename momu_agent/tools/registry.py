@@ -1,6 +1,6 @@
 """工具注册表"""
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from ..core.exceptions import ToolException
 from ..utils.logger import get_logger
@@ -64,11 +64,11 @@ class ToolRegistry:
         else:
             self.logger.warning(f"🔧 工具 '{name}' 不存在。")
 
-    def get_tool(self, name: str) -> Optional[Tool]:
+    def get_tool(self, name: str) -> Tool | None:
         """获取Tool对象"""
         return self._tools.get(name)
 
-    def get_function(self, name: str) -> Optional[Callable]:
+    def get_function(self, name: str) -> Callable | None:
         """获取工具函数"""
         func_info = self._functions.get(name)
         return func_info["func"] if func_info else None

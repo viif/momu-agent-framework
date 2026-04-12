@@ -1,4 +1,4 @@
-from typing import AsyncIterator, Dict, List, Optional, cast
+from typing import AsyncIterator, cast
 
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
@@ -18,7 +18,7 @@ class LLM:
         api_key: str,
         base_url: str,
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
         timeout: int = 60,
         **kwargs,
     ):
@@ -57,7 +57,7 @@ class LLM:
             raise LLMException(error_msg)
 
     async def think(
-        self, messages: List[Dict[str, str]], temperature: Optional[float] = None
+        self, messages: list[dict[str, str]], temperature: float | None = None
     ) -> AsyncIterator[str]:
         """
         异步流式思考接口
@@ -68,7 +68,7 @@ class LLM:
         self.logger.info(f"🧠 开始异步流式调用模型: {self.model}")
 
         try:
-            typed_messages = cast(List[ChatCompletionMessageParam], messages)
+            typed_messages = cast(list[ChatCompletionMessageParam], messages)
 
             response = await self._client.chat.completions.create(
                 model=self.model,
@@ -94,7 +94,7 @@ class LLM:
             self.logger.error(error_msg)
             raise LLMException(error_msg)
 
-    async def invoke(self, messages: List[Dict[str, str]], **kwargs) -> str:
+    async def invoke(self, messages: list[dict[str, str]], **kwargs) -> str:
         """
         异步非流式调用接口
 
@@ -104,7 +104,7 @@ class LLM:
         self.logger.info(f"🧠 开始异步非流式调用模型: {self.model}")
 
         try:
-            typed_messages = cast(List[ChatCompletionMessageParam], messages)
+            typed_messages = cast(list[ChatCompletionMessageParam], messages)
 
             response = await self._client.chat.completions.create(
                 model=self.model,

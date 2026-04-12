@@ -2,7 +2,7 @@
 
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...utils.logger import get_logger
 
@@ -39,7 +39,7 @@ class ToolParser:
         """初始化解析器，配置专属 logger"""
         self.logger = get_logger(__name__)
 
-    def extract_tool_calls(self, text: str) -> List[Dict[str, Any]]:
+    def extract_tool_calls(self, text: str) -> list[dict[str, Any]]:
         """
         从文本中提取所有工具调用
         Returns:
@@ -68,7 +68,7 @@ class ToolParser:
             self.logger.error(f"🔍 正则匹配工具调用失败: {e}")
             return []
 
-    def parse_parameters(self, raw_params: str) -> Dict[str, Any]:
+    def parse_parameters(self, raw_params: str) -> dict[str, Any]:
         """
         解析 JSON 参数字符串
         """
@@ -87,8 +87,8 @@ class ToolParser:
                 return {}
 
     def parse_typed_parameters(
-        self, tool_name: str, raw_parameters: str, tool_obj: Optional[Any]
-    ) -> Dict[str, Any]:
+        self, tool_name: str, raw_parameters: str, tool_obj: Any
+    ) -> dict[str, Any]:
         """
         解析并转换工具参数类型
 

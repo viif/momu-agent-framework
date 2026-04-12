@@ -1,7 +1,7 @@
 """配置管理"""
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -17,7 +17,7 @@ class Config(BaseModel):
     api_key: str
     base_url: str
     temperature: float = 0.7
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     timeout: float = 60.0
 
     # 系统配置
@@ -27,11 +27,11 @@ class Config(BaseModel):
     max_history_length: int = 100
 
     # 搜索工具配置
-    tavily_api_key: Optional[str] = None
-    serpapi_api_key: Optional[str] = None
+    tavily_api_key: str | None = None
+    serpapi_api_key: str | None = None
 
     @classmethod
-    def from_env(cls, dotenv_path: Optional[str] = None) -> "Config":
+    def from_env(cls, dotenv_path: str | None = None) -> "Config":
         """从环境变量创建配置"""
         load_dotenv(dotenv_path=dotenv_path)
 
@@ -60,6 +60,6 @@ class Config(BaseModel):
             serpapi_api_key=os.getenv("SERPAPI_API_KEY"),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
         return self.model_dump()

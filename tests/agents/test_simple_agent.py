@@ -161,8 +161,20 @@ async def test_agent_parallel_tool_calls(mock_run_parallel, mock_llm, mock_regis
         "北京晴，上海雨。",
     ]
     mock_run_parallel.return_value = [
-        {"task_id": 0, "tool_name": "search", "input_data": {}, "result": "北京晴", "status": "success"},
-        {"task_id": 1, "tool_name": "search", "input_data": {}, "result": "上海雨", "status": "success"},
+        {
+            "task_id": 0,
+            "tool_name": "search",
+            "input_data": {},
+            "result": "北京晴",
+            "status": "success",
+        },
+        {
+            "task_id": 1,
+            "tool_name": "search",
+            "input_data": {},
+            "result": "上海雨",
+            "status": "success",
+        },
     ]
 
     # Act

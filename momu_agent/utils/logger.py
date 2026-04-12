@@ -2,7 +2,6 @@
 
 import logging
 import sys
-from typing import Optional
 
 import colorama
 from colorama import Fore, Style
@@ -35,7 +34,7 @@ class ColoredFormatter(logging.Formatter):
 def setup_logger(
     name: str = "momu_agent",
     level: str = "WARNING",
-    format_string: Optional[str] = None,
+    format_string: str | None = None,
 ) -> logging.Logger:
     """
     显式设置日志记录器（供用户手动配置使用）

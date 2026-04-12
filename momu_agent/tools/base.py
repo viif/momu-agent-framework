@@ -1,7 +1,7 @@
 """工具基类"""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -28,16 +28,16 @@ class Tool(ABC):
         self.logger = get_logger(__name__)
 
     @abstractmethod
-    def run(self, parameters: Dict[str, Any]) -> str:
+    def run(self, parameters: dict[str, Any]) -> str:
         """执行工具"""
         pass
 
     @abstractmethod
-    def get_parameters(self) -> List[ToolParameter]:
+    def get_parameters(self) -> list[ToolParameter]:
         """获取工具参数定义"""
         pass
 
-    def validate_parameters(self, parameters: Dict[str, Any]) -> bool:
+    def validate_parameters(self, parameters: dict[str, Any]) -> bool:
         """验证参数"""
         self.logger.debug(f"🔧 正在验证工具 [{self.name}] 的参数: {parameters}")
 
@@ -53,7 +53,7 @@ class Tool(ABC):
         self.logger.debug(f"🔧 工具 [{self.name}] 参数验证通过")
         return True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式"""
         return {
             "name": self.name,

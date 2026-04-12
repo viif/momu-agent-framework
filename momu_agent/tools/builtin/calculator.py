@@ -3,11 +3,11 @@
 import ast
 import math
 import operator
-from typing import Any, Dict
+from typing import Any
 
 from ...core.exceptions import ToolException
 from ...utils.logger import get_logger
-from ..base import Tool
+from ..base import Tool, ToolParameter
 
 
 class CalculatorTool(Tool):
@@ -49,7 +49,7 @@ class CalculatorTool(Tool):
 
         self.logger = get_logger(__name__)
 
-    def run(self, parameters: Dict[str, Any]) -> str:
+    def run(self, parameters: dict[str, Any]) -> str:
         """
         执行计算
 
@@ -84,11 +84,7 @@ class CalculatorTool(Tool):
 
     def _eval_node(self, node):
         """递归计算AST节点"""
-        if isinstance(node, ast.Constant):  # Python 3.8+
-            return node.value
-        elif isinstance(node, ast.Constant) and isinstance(
-            node.value, (int, float)
-        ):  # Python < 3.8
+        if isinstance(node, ast.Constant):
             return node.value
         elif isinstance(node, ast.BinOp):
             return self.OPERATORS[type(node.op)](
@@ -111,10 +107,8 @@ class CalculatorTool(Tool):
         else:
             raise ValueError(f"不支持的表达式类型: {type(node)}")
 
-    def get_parameters(self):
+    def get_parameters(self) -> list[ToolParameter]:
         """获取工具参数定义"""
-        from ..base import ToolParameter
-
         return [
             ToolParameter(
                 name="expression",
