@@ -21,8 +21,8 @@ class SimpleAgent(Agent):
         name: str,
         llm: LLM,
         system_prompt: str | None = None,
-        tool_registry: ToolRegistry | None = None,
         max_history_length: int = 100,
+        tool_registry: ToolRegistry | None = None,
     ):
         super().__init__(name, llm, system_prompt, max_history_length)
         self.tool_registry = tool_registry
