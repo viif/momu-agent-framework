@@ -1,8 +1,10 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from momu_agent.agents.plan_solve_agent import PlanSolveAgent
+from momu_agent.tools.base import ToolParameter
+from momu_agent.tools.registry import ToolRegistry
 
 
 @pytest.fixture
@@ -176,3 +178,220 @@ def test_default_initialization(mock_llm):
     assert agent.planner.prompt_template == DEFAULT_PLANNER_PROMPT
     assert agent.executor.prompt_template == DEFAULT_EXECUTOR_PROMPT
     assert agent.max_history_length == 100
+
+
+# ---------- 工具调用测试 ----------
+
+
+class MockCalculatorTool:
+    name = "calculator"
+    description = "计算数学表达式"
+
+    def get_parameters(self) -> list[ToolParameter]:
+        return [
+            ToolParameter(
+                name="expression",
+                type="string",
+                description="要计算的数学表达式",
+                required=True,
+            )
+        ]
+
+    def run(self, parameters: dict) -> str:
+        return str(eval(parameters["expression"]))  # noqa: S307
+
+
+@pytest.fixture
+def mock_registry():
+    """创建模拟工具注册表"""
+    registry = Mock(spec=ToolRegistry)
+    registry.get_tools_description = Mock(
+        return_value="calculator: 计算数学表达式\n  - expression (string, 必填): 要计算的数学表达式"
+    )
+    registry.get_tool = Mock(return_value=MockCalculatorTool())
+    return registry
+
+
+def test_plan_solve_agent_init_with_tool_registry(mock_llm, mock_registry):
+    """
+    测试：传入 tool_registry 后，agent 与 executor 均持有该注册表引用，
+    且 max_tool_iterations 默认为 3
+    """
+    agent = PlanSolveAgent(name="ToolAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    assert agent.tool_registry is mock_registry
+    assert agent.executor.tool_registry is mock_registry
+    assert agent.executor.max_tool_iterations == 3
+
+
+async def test_executor_includes_tool_system_prompt(mock_llm, mock_registry):
+    """
+    测试：有 tool_registry 时，执行器向 LLM 发送的消息首条为 system role，
+    且包含工具描述信息
+    """
+    agent = PlanSolveAgent(name="ToolAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    mock_llm.invoke.side_effect = [
+        '```python\n["计算步骤"]\n```',
+        "计算结果为 42",
+    ]
+
+    await agent.run("测试工具提示词")
+
+    executor_messages = mock_llm.invoke.call_args_list[1][0][0]
+    assert executor_messages[0]["role"] == "system"
+    assert "calculator" in executor_messages[0]["content"]
+    assert "TOOL_CALL" in executor_messages[0]["content"]
+
+
+@patch("momu_agent.agents.plan_solve_agent.run_parallel_tools")
+async def test_executor_step_calls_tool_and_continues(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    测试：执行步骤中 LLM 返回工具调用 → run_parallel_tools 被调用 →
+    LLM 再次被调用获取最终答案
+    """
+    agent = PlanSolveAgent(name="ToolAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {"expression": "100 * 3"},
+            "result": "300",
+            "status": "success",
+        }
+    ]
+    mock_llm.invoke.side_effect = [
+        '```python\n["计算总价"]\n```',
+        '[TOOL_CALL:calculator:{"expression": "100 * 3"}]',
+        "总价为 300 元",
+    ]
+
+    result = await agent.run("买了 3 件 100 元的商品，总价是多少？")
+
+    assert result == "总价为 300 元"
+    assert mock_run_parallel.called
+    assert mock_llm.invoke.call_count == 3  # 1 规划 + 1 工具调用 + 1 最终答案
+
+
+@patch("momu_agent.agents.plan_solve_agent.run_parallel_tools")
+async def test_executor_tool_result_in_continuation_messages(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    测试：工具执行结果作为 tool role 消息传入下一次 LLM 调用
+    """
+    agent = PlanSolveAgent(name="ToolAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {"expression": "5 * 20"},
+            "result": "100",
+            "status": "success",
+        }
+    ]
+    mock_llm.invoke.side_effect = [
+        '```python\n["计算步骤"]\n```',
+        '[TOOL_CALL:calculator:{"expression": "5 * 20"}]',
+        "结果是 100",
+    ]
+
+    await agent.run("5 乘以 20 是多少？")
+
+    # 第 3 次调用（index=2）是工具调用后的继续调用
+    continuation_messages = mock_llm.invoke.call_args_list[2][0][0]
+    roles = [m["role"] for m in continuation_messages]
+    assert "tool" in roles
+    # tool 消息应包含工具结果
+    tool_msg = next(m for m in continuation_messages if m["role"] == "tool")
+    assert "100" in tool_msg["content"]
+
+
+@patch("momu_agent.agents.plan_solve_agent.run_parallel_tools")
+async def test_executor_tool_error_in_step(mock_run_parallel, mock_llm, mock_registry):
+    """
+    测试：工具执行失败时，错误信息以 ❌ 格式写入 tool 消息，执行继续
+    """
+    agent = PlanSolveAgent(name="ToolAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {"expression": "1/0"},
+            "result": "division by zero",
+            "status": "error",
+        }
+    ]
+    mock_llm.invoke.side_effect = [
+        '```python\n["计算步骤"]\n```',
+        '[TOOL_CALL:calculator:{"expression": "1/0"}]',
+        "无法计算，发生了除零错误",
+    ]
+
+    result = await agent.run("计算 1/0")
+
+    continuation_messages = mock_llm.invoke.call_args_list[2][0][0]
+    tool_msg = next(m for m in continuation_messages if m["role"] == "tool")
+    assert "❌" in tool_msg["content"]
+    assert result == "无法计算，发生了除零错误"
+
+
+@patch("momu_agent.agents.plan_solve_agent.run_parallel_tools")
+async def test_executor_max_tool_iterations_in_step(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    测试：单步中 LLM 持续返回工具调用，达到 max_tool_iterations 后返回警告信息
+    """
+    agent = PlanSolveAgent(
+        name="ToolAgent",
+        llm=mock_llm,
+        tool_registry=mock_registry,
+        max_tool_iterations=2,
+    )
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {},
+            "result": "42",
+            "status": "success",
+        }
+    ]
+    # 规划 1 次 + 步骤内连续 2 次工具调用（达到上限）
+    mock_llm.invoke.side_effect = [
+        '```python\n["唯一步骤"]\n```',
+        '[TOOL_CALL:calculator:{"expression": "1+1"}]',
+        '[TOOL_CALL:calculator:{"expression": "2+2"}]',
+    ]
+
+    result = await agent.run("持续调用工具测试")
+
+    assert "已达到最大工具调用次数限制" in result
+    assert mock_run_parallel.call_count == 2
+
+
+async def test_no_tool_registry_behavior_unchanged(mock_llm):
+    """
+    测试：未传入 tool_registry 时，执行器行为与原始版本完全一致（无 system 消息，单次 LLM 调用）
+    """
+    agent = PlanSolveAgent(name="NoToolAgent", llm=mock_llm)
+
+    mock_llm.invoke.side_effect = [
+        '```python\n["唯一步骤"]\n```',
+        "直接回答",
+    ]
+
+    result = await agent.run("无工具测试")
+
+    assert result == "直接回答"
+    # 执行步骤的消息列表第一条应为 user role，不含 system
+    executor_messages = mock_llm.invoke.call_args_list[1][0][0]
+    assert executor_messages[0]["role"] == "user"
+    assert len(executor_messages) == 1

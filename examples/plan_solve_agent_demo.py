@@ -1,9 +1,10 @@
 """
 PlanSolveAgent 使用示例
 
-演示两种使用模式：
+演示三种使用模式：
 1. 多步骤数学推理 — 展示规划分解与逐步执行流程
 2. 自定义提示词 — 展示如何通过 custom_prompts 定制规划器和执行器
+3. 工具调用 — 展示执行阶段结合计算器工具完成精确计算
 
 运行前请先复制 .env.example 为 .env 并填写相关配置：
   cp .env.example .env
@@ -14,6 +15,8 @@ import asyncio
 from momu_agent.agents.plan_solve_agent import PlanSolveAgent
 from momu_agent.core.config import Config
 from momu_agent.core.llm import LLM
+from momu_agent.tools.builtin.calculator import CalculatorTool
+from momu_agent.tools.registry import ToolRegistry
 from momu_agent.utils.logger import setup_logger
 
 
@@ -40,21 +43,13 @@ async def demo_math_reasoning(config: Config):
         max_history_length=config.max_history_length,
     )
 
-    questions = [
-        (
-            "一个储蓄罐里有硬币：1 元硬币 15 枚，5 角硬币 20 枚，1 角硬币 30 枚。"
-            "如果取出总金额的 40%，能取出多少钱？"
-        ),
-        (
-            "某工厂第一季度生产了 1200 件产品，第二季度比第一季度增长了 25%，"
-            "第三季度又比第二季度减少了 10%。前三季度总产量是多少？"
-        ),
-    ]
-
-    for q in questions:
-        print(f"\n用户: {q}")
-        response = await agent.run(q)
-        print(f"Agent: {response}")
+    question = (
+        "某工厂第一季度生产了 1200 件产品，第二季度比第一季度增长了 25%，"
+        "第三季度又比第二季度减少了 10%。前三季度总产量是多少？"
+    )
+    print(f"\n用户: {question}")
+    response = await agent.run(question)
+    print(f"Agent: {response}")
 
 
 # ---------- 示例 2：自定义提示词 ----------
@@ -102,12 +97,40 @@ async def demo_custom_prompts(config: Config):
     print(f"Agent: {response}")
 
 
+# ---------- 示例 3：使用计算器工具 ----------
+async def demo_with_calculator_tool(config: Config):
+    print("\n" + "=" * 50)
+    print("示例 3：使用计算器工具")
+    print("=" * 50)
+
+    registry = ToolRegistry()
+    registry.register_tool(CalculatorTool())
+
+    agent = PlanSolveAgent(
+        name="ToolPlanAgent",
+        llm=build_llm(config),
+        max_history_length=config.max_history_length,
+        tool_registry=registry,
+        max_tool_iterations=3,
+    )
+
+    question = (
+        "某投资组合由三只股票组成：A 股 50 股，单价 32.5 元；"
+        "B 股 120 股，单价 18.8 元；C 股 30 股，单价 76.2 元。"
+        "请计算该投资组合的总市值。"
+    )
+    print(f"\n用户: {question}")
+    response = await agent.run(question)
+    print(f"Agent: {response}")
+
+
 async def main():
     config = Config.from_env()
     setup_logger(level=config.log_level)
 
     await demo_math_reasoning(config)
     await demo_custom_prompts(config)
+    await demo_with_calculator_tool(config)
 
 
 if __name__ == "__main__":
