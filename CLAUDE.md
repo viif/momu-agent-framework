@@ -25,7 +25,7 @@ momu_agent/
 │       ├── calculator.py  # 计算器工具
 │       └── search.py      # 搜索工具（Tavily / SerpAPI）
 ├── agents/             # Agent 实现
-│   ├── simple_agent.py # SimpleAgent（支持工具调用和流式输出）
+│   ├── simple_agent.py # SimpleAgent（async，支持工具调用和流式输出）
 │   └── parser/
 │       └── tool_parser.py # 工具调用解析器
 └── utils/
@@ -76,6 +76,13 @@ cp .env.example .env
 
 可选环境变量：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`。
 
+## 异步约定
+
+- `Agent.run()` 和 `Agent.stream_run()` 均为 `async` 方法，调用时需 `await` / `async for`
+- 新增 Agent 子类必须实现 `async def run()`
+- 示例和脚本入口使用 `asyncio.run(main())`
+- 测试使用 pytest-asyncio，配置 `asyncio_mode = "auto"`，async 测试函数无需额外标注
+
 ## 代码风格
 
 使用 Ruff，配置如下：
@@ -84,6 +91,7 @@ cp .env.example .env
 - 启用规则：`E`（pycodestyle 错误）、`F`（pyflakes）、`I`（isort）
 - 忽略 `E501`（行过长）
 - 字符串使用双引号
+- 类型注解使用 Python 3.10+ 语法：`X | None`、`list[...]`、`dict[...]`，不使用 `typing.Optional/List/Dict`
 
 ## Git 提交规范
 

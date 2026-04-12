@@ -4,11 +4,12 @@
 
 ## 特性
 
+- **全异步设计** — `Agent.run()` 和 `Agent.stream_run()` 均为 `async` 方法，天然支持高并发场景
 - **Agent 体系** — 抽象基类 `Agent` + 开箱即用的 `SimpleAgent`，支持多轮对话与历史记录管理
 - **工具系统** — `ToolRegistry` 统一管理工具，支持 `Tool` 对象和函数两种注册方式
 - **工具链** — `ToolChain` / `ToolChainManager` 支持多工具顺序编排
 - **并发执行** — `AsyncToolExecutor` 异步并发调用多个工具
-- **流式输出** — `SimpleAgent.stream_run` 支持逐 token 流式响应
+- **流式输出** — `SimpleAgent.stream_run` 支持逐 token 异步流式响应
 - **内置工具** — 计算器（`CalculatorTool`）、搜索（Tavily / SerpAPI）
 - **OpenAI 兼容** — `LLM` 接入任何兼容 OpenAI 接口的模型
 
@@ -40,7 +41,10 @@ LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 ## 快速上手
 
+### 基础对话
+
 ```python
+import asyncio
 from momu_agent.agents import SimpleAgent
 from momu_agent.core.config import Config
 from momu_agent.core.llm import LLM
@@ -52,9 +56,45 @@ llm = LLM(
     base_url=config.base_url,
 )
 
-agent = SimpleAgent(name="MyAgent", llm=llm, system_prompt="你是一个有用的助手。")
-response = agent.run("你好！")
-print(response)
+async def main():
+    agent = SimpleAgent(name="MyAgent", llm=llm, system_prompt="你是一个有用的助手。")
+    response = await agent.run("你好！")
+    print(response)
+
+asyncio.run(main())
+```
+
+### 流式输出
+
+```python
+async def main():
+    agent = SimpleAgent(name="MyAgent", llm=llm)
+    async for chunk in agent.stream_run("请讲一个小故事。"):
+        print(chunk, end="", flush=True)
+
+asyncio.run(main())
+```
+
+### 工具调用
+
+```python
+from momu_agent.tools.builtin.calculator import CalculatorTool
+from momu_agent.tools.registry import ToolRegistry
+
+async def main():
+    registry = ToolRegistry()
+    registry.register_tool(CalculatorTool())
+
+    agent = SimpleAgent(
+        name="ToolAgent",
+        llm=llm,
+        system_prompt="你是一个数学助手，遇到计算问题时请使用工具。",
+        tool_registry=registry,
+    )
+    response = await agent.run("sqrt(144) + 2^10 等于多少？")
+    print(response)
+
+asyncio.run(main())
 ```
 
 ## 运行示例
