@@ -25,10 +25,12 @@ momu_agent/
 │       ├── calculator.py  # 计算器工具
 │       └── search.py      # 搜索工具（Tavily / SerpAPI）
 ├── agents/             # Agent 实现
-│   ├── simple_agent.py # SimpleAgent（async，支持工具调用和流式输出）
-│   ├── react_agent.py  # ReActAgent（Thought → Action → Observation 循环）
+│   ├── simple_agent.py      # SimpleAgent（async，支持工具调用和流式输出）
+│   ├── react_agent.py       # ReActAgent（Thought → Action → Observation 循环）
+│   ├── plan_solve_agent.py  # PlanSolveAgent（规划分解 → 逐步执行）
+│   ├── reflection_agent.py  # ReflectionAgent（初始生成 → 反思迭代 → 最终答案）
 │   └── parser/
-│       └── tool_parser.py # 工具调用解析器
+│       └── tool_parser.py   # 工具调用解析器
 └── utils/
     └── logger.py       # 日志工具
 ```
@@ -44,6 +46,8 @@ uv sync --frozen --all-extras
 # 运行示例
 uv run python examples/simple_agent_demo.py
 uv run python examples/react_agent_demo.py
+uv run python examples/plan_solve_agent_demo.py
+uv run python examples/reflection_agent_demo.py
 
 # 运行所有测试
 uv run pytest
