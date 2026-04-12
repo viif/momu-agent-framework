@@ -1,5 +1,12 @@
 """工具系统"""
 
+from .async_executor import (
+    AsyncToolExecutor,
+    run_batch_tool,
+    run_batch_tool_sync,
+    run_parallel_tools,
+    run_parallel_tools_sync,
+)
 from .base import Tool, ToolParameter
 from .builtin.calculator import CalculatorTool
 from .builtin.search import SearchTool
@@ -15,4 +22,9 @@ __all__ = [
     "global_registry",
     "CalculatorTool",
     "SearchTool",
+    "AsyncToolExecutor",
+    "run_parallel_tools",
+    "run_parallel_tools_sync",
+    "run_batch_tool",
+    "run_batch_tool_sync",
 ]
