@@ -39,18 +39,18 @@ class Tool(ABC):
 
     def validate_parameters(self, parameters: Dict[str, Any]) -> bool:
         """验证参数"""
-        self.logger.debug(f"正在验证工具 [{self.name}] 的参数: {parameters}")
+        self.logger.debug(f"🔧 正在验证工具 [{self.name}] 的参数: {parameters}")
 
         required_params = [p.name for p in self.get_parameters() if p.required]
         missing_params = [param for param in required_params if param not in parameters]
 
         if missing_params:
             self.logger.error(
-                f"工具 [{self.name}] 参数验证失败，缺少必填参数: {missing_params}"
+                f"🔧 工具 [{self.name}] 参数验证失败，缺少必填参数: {missing_params}"
             )
             return False
 
-        self.logger.debug(f"工具 [{self.name}] 参数验证通过")
+        self.logger.debug(f"🔧 工具 [{self.name}] 参数验证通过")
         return True
 
     def to_dict(self) -> Dict[str, Any]:
