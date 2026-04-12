@@ -35,7 +35,6 @@ class TestConfig:
             assert config.base_url == "http://test.url"
             # 检查默认值
             assert config.temperature == 0.7
-            assert config.debug is False
             assert config.max_tokens is None
             assert config.timeout == 60.0
             assert config.max_history_length == 100
@@ -44,7 +43,6 @@ class TestConfig:
         """测试加载非默认的环境变量值"""
         with self._mock_env(
             TEMPERATURE="0.9",
-            DEBUG="true",
             MAX_TOKENS="2048",
             LOG_LEVEL="DEBUG",
             TIMEOUT="120.5",
@@ -52,7 +50,6 @@ class TestConfig:
             config = Config.from_env()
 
             assert config.temperature == 0.9
-            assert config.debug is True
             assert config.max_tokens == 2048
             assert config.log_level == "DEBUG"
             assert config.timeout == 120.5

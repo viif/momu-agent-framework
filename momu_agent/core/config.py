@@ -21,7 +21,6 @@ class Config(BaseModel):
     timeout: float = 60.0
 
     # 系统配置
-    debug: bool = False
     log_level: str = "INFO"
 
     # 其他配置
@@ -48,7 +47,6 @@ class Config(BaseModel):
             model_id=model_id,
             api_key=api_key,
             base_url=base_url,
-            debug=os.getenv("DEBUG", "false").lower() == "true",
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             temperature=float(os.getenv("TEMPERATURE", "0.7")),
             max_tokens=int(max_tokens_env) if max_tokens_env is not None else None,
