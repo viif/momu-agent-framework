@@ -42,7 +42,7 @@ class TestSearchTool:
         tool = SearchTool(backend="tavily", tavily_api_key="fake")
 
         with pytest.raises(ToolException):
-            tool.run({"input": ""})
+            tool.run({"query": ""})
 
     @patch("momu_agent.tools.builtin.search.TavilyClient")
     def test_search_tavily_success(self, mock_tavily_class):
@@ -63,7 +63,7 @@ class TestSearchTool:
         mock_client_instance.search.return_value = mock_response
 
         tool = SearchTool(backend="tavily", tavily_api_key="fake")
-        result = tool.run({"input": "meaning of life"})
+        result = tool.run({"query": "meaning of life"})
 
         assert "42" in result
         assert "Life Answer" in result
@@ -84,7 +84,7 @@ class TestSearchTool:
         mock_client_instance.search.return_value = mock_results
 
         tool = SearchTool(backend="serpapi", serpapi_key="fake")
-        result = tool.run({"input": "calculate 2+2"})
+        result = tool.run({"query": "calculate 2+2"})
 
         assert "2 + 2 = 4" in result
         assert "Math" in result
@@ -101,7 +101,7 @@ class TestSearchTool:
         }
 
         tool = SearchTool(backend="hybrid", tavily_api_key="fake", serpapi_key="fake")
-        result = tool.run({"input": "test"})
+        result = tool.run({"query": "test"})
 
         assert "Tavily Result" in result
         mock_client_instance.search.assert_called_once()
@@ -123,7 +123,7 @@ class TestSearchTool:
         }
 
         tool = SearchTool(backend="hybrid", tavily_api_key="fake", serpapi_key="fake")
-        result = tool.run({"input": "test"})
+        result = tool.run({"query": "test"})
 
         assert "Fallback" in result
         mock_tavily_instance.search.assert_called_once()
@@ -137,6 +137,6 @@ class TestSearchTool:
         mock_serp_instance.search.return_value = {"organic_results": []}
 
         tool = SearchTool(backend="hybrid", serpapi_key="fake")
-        tool.run({"input": "test"})
+        tool.run({"query": "test"})
 
         mock_serp_instance.search.assert_called_once()

@@ -106,7 +106,7 @@ class SearchTool(Tool):
         Raises:
             ToolException: 当搜索执行失败时抛出
         """
-        query = parameters.get("input", "").strip()
+        query = parameters.get("query", parameters.get("input", "")).strip()
         if not query:
             raise ToolException("搜索查询不能为空")
 
@@ -199,7 +199,7 @@ class SearchTool(Tool):
         """获取工具参数定义"""
         return [
             ToolParameter(
-                name="input", type="string", description="搜索查询关键词", required=True
+                name="query", type="string", description="搜索查询关键词", required=True
             )
         ]
 
