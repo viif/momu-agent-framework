@@ -1,12 +1,10 @@
-import logging
 from typing import Dict, Iterator, List, Optional, cast
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
+from ..utils.logger import get_logger
 from .exceptions import LLMException
-
-logger = logging.getLogger(__name__)
 
 
 class MomuAgentLLM:
@@ -54,16 +52,18 @@ class MomuAgentLLM:
         self.timeout = timeout
         self.kwargs = kwargs
 
-        logger.debug(f"正在初始化 LLM 客户端: {self.model} @ {self.base_url}")
+        self.logger = get_logger(__name__)
+
+        self.logger.debug(f"🧠 正在初始化 LLM 客户端: {self.model} @ {self.base_url}")
 
         try:
             self._client = OpenAI(
                 api_key=self.api_key, base_url=self.base_url, timeout=self.timeout
             )
-            logger.info(f"✅ LLM 客户端初始化成功: {self.model}")
+            self.logger.info(f"🧠 LLM 客户端初始化成功: {self.model}")
         except Exception as e:
-            error_msg = f"LLM 客户端初始化失败: {str(e)}"
-            logger.error(error_msg)
+            error_msg = f"🧠 LLM 客户端初始化失败: {str(e)}"
+            self.logger.error(error_msg)
             raise LLMException(error_msg)
 
     def think(
@@ -82,8 +82,8 @@ class MomuAgentLLM:
         Raises:
             LLMException: 当 API 调用失败时。
         """
-        logger.info(f"🧠 开始流式调用模型: {self.model}")
-        logger.debug(f"对话历史: {messages}")
+        self.logger.info(f"🧠 开始流式调用模型: {self.model}")
+        self.logger.debug(f"🧠 对话历史: {messages}")
 
         try:
             typed_messages = cast(List[ChatCompletionMessageParam], messages)
@@ -106,12 +106,12 @@ class MomuAgentLLM:
                     full_content += content
                     yield content
 
-            logger.info("✅ 流式响应完成")
+            self.logger.info("🧠 流式响应完成")
             return full_content
 
         except Exception as e:
-            error_msg = f"流式调用失败: {str(e)}"
-            logger.error(error_msg)
+            error_msg = f"🧠 流式调用失败: {str(e)}"
+            self.logger.error(error_msg)
             raise LLMException(error_msg)
 
     def invoke(self, messages: List[Dict[str, str]], **kwargs) -> str:
@@ -128,7 +128,7 @@ class MomuAgentLLM:
         Raises:
             LLMException: 当 API 调用失败时。
         """
-        logger.info(f"➡️  开始非流式调用模型: {self.model}")
+        self.logger.info(f"🧠 开始非流式调用模型: {self.model}")
 
         try:
             typed_messages = cast(List[ChatCompletionMessageParam], messages)
@@ -141,9 +141,9 @@ class MomuAgentLLM:
             content = response.choices[0].message.content
             if not content:
                 raise LLMException("模型返回内容为空")
-            logger.info("✅ 非流式响应完成")
+            self.logger.info("🧠 非流式响应完成")
             return content
         except Exception as e:
-            error_msg = f"非流式调用失败: {str(e)}"
-            logger.error(error_msg)
+            error_msg = f"🧠 非流式调用失败: {str(e)}"
+            self.logger.error(error_msg)
             raise LLMException(error_msg)

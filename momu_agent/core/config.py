@@ -21,7 +21,7 @@ class Config(BaseModel):
     timeout: float = 60.0
 
     # 系统配置
-    log_level: str = "INFO"
+    log_level: str = "WARNING"
 
     # 其他配置
     max_history_length: int = 100
@@ -47,7 +47,7 @@ class Config(BaseModel):
             model_id=model_id,
             api_key=api_key,
             base_url=base_url,
-            log_level=os.getenv("LOG_LEVEL", "INFO"),
+            log_level=os.getenv("LOG_LEVEL", "WARNING"),
             temperature=float(os.getenv("TEMPERATURE", "0.7")),
             max_tokens=int(max_tokens_env) if max_tokens_env is not None else None,
             timeout=float(os.getenv("TIMEOUT", "60.0")),

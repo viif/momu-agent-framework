@@ -5,6 +5,7 @@ description = "参考HelloAgents实现的智能体框架"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "colorama>=0.4.6",
     "openai>=2.31.0",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.2",
@@ -15,7 +16,7 @@ where = ["."]
 include = ["momu_agent*"]
 exclude = ["tests*"]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.8.0",

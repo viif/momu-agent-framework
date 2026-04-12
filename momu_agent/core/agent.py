@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from ..utils.logger import get_logger
 from .llm import MomuAgentLLM
 from .message import Message
 
@@ -32,6 +33,12 @@ class Agent(ABC):
         self.max_history_length = max_history_length
         self._history: list[Message] = []
 
+        self.logger = get_logger(__name__)
+
+        self.logger.info(f"🤖 Agent '{self.name}' 初始化完成 (模型: {self.llm.model})")
+        if self.system_prompt:
+            self.logger.debug(f"🤖 系统提示词已加载: {self.system_prompt[:50]}...")
+
     @abstractmethod
     def run(self, input_text: str, **kwargs) -> str:
         """运行Agent"""
@@ -43,6 +50,9 @@ class Agent(ABC):
         如果历史记录超过最大长度，自动移除最早的记录 (FIFO)
         """
         self._history.append(message)
+        self.logger.debug(
+            f"🤖 添加消息到历史: [{message.role}] {message.content[:30]}..."
+        )
         self._trim_history()
 
     def _trim_history(self):
@@ -50,11 +60,19 @@ class Agent(ABC):
         修剪历史记录
         当记录数超过 max_history_length 时，移除最旧的记录
         """
+        if len(self._history) > self.max_history_length:
+            self.logger.warning(
+                f"🤖 历史记录超出限制 ({len(self._history)}/{self.max_history_length})，正在修剪..."
+            )
         while len(self._history) > self.max_history_length:
-            self._history.pop(0)
+            removed_msg = self._history.pop(0)
+            self.logger.debug(f"🤖 移除旧消息: {removed_msg.content[:20]}...")
 
     def clear_history(self):
         """清空历史记录"""
+        self.logger.info(
+            f"🤖 清空 Agent '{self.name}' 的历史记录 (当前数量: {len(self._history)})"
+        )
         self._history.clear()
 
     def get_history(self) -> list[Message]:
