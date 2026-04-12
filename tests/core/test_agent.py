@@ -7,7 +7,7 @@ from momu_agent.core.message import Message
 class MockAgent(Agent):
     """用于测试的 Mock Agent，实现抽象方法"""
 
-    def run(self, input_text: str, **kwargs) -> str:
+    async def run(self, input_text: str, **kwargs) -> str:
         return f"Mock response to: {input_text}"
 
 

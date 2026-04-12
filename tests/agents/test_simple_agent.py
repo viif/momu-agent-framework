@@ -55,7 +55,7 @@ def mock_registry():
     return registry
 
 
-def test_agent_no_tool_call(mock_llm):
+async def test_agent_no_tool_call(mock_llm):
     """测试没有工具时的普通对话"""
     # Arrange
     mock_llm.invoke.return_value = "这是最终答案。"
@@ -63,7 +63,7 @@ def test_agent_no_tool_call(mock_llm):
     agent = SimpleAgent(name="TestAgent", llm=mock_llm, tool_registry=None)
 
     # Act
-    response = agent.run("你好，世界！")
+    response = await agent.run("你好，世界！")
 
     # Assert
     assert response == "这是最终答案。"
@@ -71,7 +71,7 @@ def test_agent_no_tool_call(mock_llm):
 
 
 @patch("momu_agent.agents.simple_agent.run_parallel_tools")
-def test_agent_with_tool_call(mock_run_parallel, mock_llm, mock_registry):
+async def test_agent_with_tool_call(mock_run_parallel, mock_llm, mock_registry):
     """
     测试包含工具调用的场景
     模拟 LLM 先输出工具调用，然后输出最终结果
@@ -97,7 +97,7 @@ def test_agent_with_tool_call(mock_run_parallel, mock_llm, mock_registry):
     ]
 
     # Act
-    response = agent.run("查询上海天气")
+    response = await agent.run("查询上海天气")
 
     # Assert
     assert "上海今天晴天" in response
@@ -106,7 +106,7 @@ def test_agent_with_tool_call(mock_run_parallel, mock_llm, mock_registry):
 
 
 @patch("momu_agent.agents.simple_agent.run_parallel_tools")
-def test_agent_max_iterations_stop(mock_run_parallel, mock_llm, mock_registry):
+async def test_agent_max_iterations_stop(mock_run_parallel, mock_llm, mock_registry):
     """
     测试达到最大迭代次数时，Agent 停止运行并返回提示信息
     """
@@ -127,7 +127,7 @@ def test_agent_max_iterations_stop(mock_run_parallel, mock_llm, mock_registry):
 
     # Act
     # 设置最大迭代次数为 2
-    response = agent.run("强制循环测试", max_tool_iterations=2)
+    response = await agent.run("强制循环测试", max_tool_iterations=2)
 
     # Assert
     # 1. 验证 LLM 调用次数严格等于 2
