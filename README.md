@@ -54,25 +54,33 @@ setup_logger(level=config.log_level)
 llm = LLM(model=config.model_id, api_key=config.api_key, base_url=config.base_url)
 ```
 
-### SimpleAgent — 多轮对话与流式输出
+### SimpleAgent — 多轮上下文对话
+
+适合需要记忆上下文的连续问答场景，如客服、教学辅导。
 
 ```python
 from momu_agent.agents import SimpleAgent
 
 async def main():
-    agent = SimpleAgent(name="Assistant", llm=llm, system_prompt="你是一个有用的助手。")
+    agent = SimpleAgent(
+        name="Support",
+        llm=llm,
+        system_prompt="你是一名 Python 技术支持助手，回答简洁准确。",
+    )
+    # 多轮对话，Agent 自动保留历史上下文
+    print(await agent.run("什么是 GIL？"))
+    print(await agent.run("它对多线程爬虫有什么具体影响？"))  # 能理解上文"它"
 
-    # 普通调用
-    print(await agent.run("你好！"))
-
-    # 流式输出
-    async for chunk in agent.stream_run("请讲一个小故事。"):
+    # 流式输出，适合长文本场景
+    async for chunk in agent.stream_run("用一句话总结以上内容。"):
         print(chunk, end="", flush=True)
 
 asyncio.run(main())
 ```
 
-### ReActAgent — Thought → Action → Observation 推理循环
+### ReActAgent — 工具辅助的逐步推理
+
+适合需要借助外部工具分步推导的问题，如数学计算、事实核查。Agent 通过 Thought → Action → Observation 循环完成推理。
 
 ```python
 from momu_agent.agents import ReActAgent
@@ -83,32 +91,43 @@ async def main():
     registry = ToolRegistry()
     registry.register_tool(CalculatorTool())
 
-    agent = ReActAgent(name="ReAct", llm=llm, tool_registry=registry, max_steps=5)
-    print(await agent.run("(2^10 + sqrt(144)) * 3 等于多少？"))
+    agent = ReActAgent(name="MathSolver", llm=llm, tool_registry=registry)
+    # Agent 先推导需要哪些计算，再调用计算器，最后得出答案
+    print(await agent.run("正方形面积为 144，求其对角线长度（保留两位小数）"))
 
 asyncio.run(main())
 ```
 
-### PlanSolveAgent — 规划分解 → 逐步执行
+### PlanSolveAgent — 规划分解复杂任务
+
+适合目标明确但步骤繁多的任务，如方案设计、报告撰写。Agent 先生成结构化计划，再逐步执行，步骤间共享上下文。
 
 ```python
 from momu_agent.agents import PlanSolveAgent
 
 async def main():
     agent = PlanSolveAgent(name="Planner", llm=llm)
-    print(await agent.run("分析大语言模型的主要应用场景及其局限性"))
+    print(await agent.run(
+        "为一个初创电商网站制定 SEO 优化方案，"
+        "涵盖现状诊断、关键词策略、内容优化、技术改进四个方面"
+    ))
 
 asyncio.run(main())
 ```
 
-### ReflectionAgent — 初始生成 → 反思迭代 → 精炼
+### ReflectionAgent — 迭代优化高质量输出
+
+适合对输出质量要求高的创作任务，如文档写作、代码生成。Agent 先产出初稿，再自我审查并改进，直到满意为止。
 
 ```python
 from momu_agent.agents import ReflectionAgent
 
 async def main():
-    agent = ReflectionAgent(name="Reflector", llm=llm, max_iterations=2)
-    print(await agent.run("写一段介绍量子计算的文字，要求通俗易懂"))
+    agent = ReflectionAgent(name="Coder", llm=llm, max_iterations=2)
+    # Agent 先生成初版代码，自我审查找出边界条件和可读性问题，再产出改进版
+    print(await agent.run(
+        "用 Python 实现一个二分查找函数，要求处理边界条件并附带类型注解"
+    ))
 
 asyncio.run(main())
 ```
