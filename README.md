@@ -2,7 +2,7 @@
 
 参考 HelloAgents 实现的智能体框架，提供 Agent、工具系统和 LLM 接入能力。
 
-## 特性
+## 🚀 特性
 
 - **全异步设计** — `Agent.run()` 为 `async` 方法，天然支持高并发场景
 - **Agent 体系** — 抽象基类 `Agent` + 四种开箱即用的 Agent：`SimpleAgent`（多轮对话/流式输出）、`ReActAgent`（Thought→Action→Observation 循环）、`PlanSolveAgent`（规划分解→逐步执行）、`ReflectionAgent`（生成→反思迭代→精炼）
@@ -13,7 +13,7 @@
 - **内置工具** — 计算器（支持四则运算、幂运算、`sqrt/sin/cos/log` 等数学函数）、联网搜索（Tavily / SerpAPI）
 - **OpenAI 兼容** — `LLM` 接入任何兼容 OpenAI 接口的模型
 
-## 安装
+## ⬇️ 安装
 
 需要 Python 3.11+，使用 [uv](https://docs.astral.sh/uv/) 管理依赖：
 
@@ -23,7 +23,7 @@ cd momu-agent-framework
 uv sync --frozen --all-extras
 ```
 
-## 配置
+## ⚙️ 配置
 
 复制 `.env.example` 为 `.env` 并填写配置：
 
@@ -39,7 +39,7 @@ LLM_API_KEY=sk-your-api-key-here
 LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
-## 快速上手
+## ✨ 快速上手
 
 所有示例共用以下初始化代码：
 
@@ -132,7 +132,7 @@ async def main():
 asyncio.run(main())
 ```
 
-## 运行更多示例
+## ▶️ 运行示例
 
 ```bash
 uv run python examples/simple_agent_demo.py
@@ -141,7 +141,7 @@ uv run python examples/plan_solve_agent_demo.py
 uv run python examples/reflection_agent_demo.py
 ```
 
-## 包结构
+## 📂 目录结构
 
 ```
 momu_agent/
@@ -152,7 +152,7 @@ momu_agent/
 └── utils/              # 工具函数（日志）
 ```
 
-## 开发
+## 💻 开发
 
 ```bash
 # 运行测试
@@ -169,6 +169,10 @@ uv run ruff format .
 
 CI 在 Python 3.11 / 3.12 / 3.13 上自动运行 lint 和测试。
 
-## 📚参考
+## 📚 参考
 
-本项目参考了 [HelloAgents](https://github.com/datawhalechina/hello-agents/) 的设计思想与实现架构。
+本项目参考了 [HelloAgents](https://github.com/jjyaoao/HelloAgents) 的设计思想与实现架构。
+
+## 🙏 致谢
+
+感谢 Datawhale 提供的[《HelloAgents》](https://github.com/datawhalechina/hello-agents)教程。
