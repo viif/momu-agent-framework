@@ -168,3 +168,7 @@ uv run ruff format .
 ```
 
 CI 在 Python 3.11 / 3.12 / 3.13 上自动运行 lint 和测试。
+
+## 📚参考
+
+本项目参考了 [HelloAgents](https://github.com/datawhalechina/hello-agents/) 的设计思想与实现架构。
