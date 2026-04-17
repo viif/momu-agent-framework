@@ -49,7 +49,7 @@ class CalculatorTool(Tool):
 
         self.logger = get_logger(__name__)
 
-    def run(self, parameters: dict[str, Any]) -> str:
+    async def run(self, parameters: dict[str, Any]) -> str:
         """
         执行计算
 
@@ -120,7 +120,7 @@ class CalculatorTool(Tool):
 
 
 # 便捷函数
-def calculate(expression: str) -> str:
+async def calculate(expression: str) -> str:
     """
     执行数学计算
 
@@ -131,4 +131,4 @@ def calculate(expression: str) -> str:
         计算结果字符串
     """
     tool = CalculatorTool()
-    return tool.run({"input": expression})
+    return await tool.run({"input": expression})

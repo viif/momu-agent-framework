@@ -1,7 +1,6 @@
-"""异步工具执行器"""
+"""工具执行器"""
 
 import asyncio
-import concurrent.futures
 from typing import Any
 
 from ..core.exceptions import ToolException
@@ -9,29 +8,27 @@ from ..utils.logger import get_logger
 from .registry import ToolRegistry
 
 
-class AsyncToolExecutor:
+class ToolExecutor:
     """异步工具执行器 - 支持超时控制和真正的并发执行"""
 
     def __init__(
         self,
         registry: ToolRegistry,
-        max_workers: int = 4,
         default_timeout: float | None = None,
     ):
         self.registry = registry
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
         self.default_timeout = default_timeout
         self.logger = get_logger(__name__)
         self.logger.info(f"🔧 异步工具执行器已初始化 (超时限制: {default_timeout}s)")
 
-    async def execute_tool_async(
+    async def execute_tool(
         self,
         tool_name: str,
         input_data: str | dict[str, Any],
         timeout: float | None = None,
     ) -> str:
         """
-        在线程池中异步执行单个工具，超时或失败时抛出 ToolException
+        异步执行单个工具，超时或失败时抛出 ToolException
 
         Args:
             tool_name: 工具名称
@@ -39,18 +36,15 @@ class AsyncToolExecutor:
             timeout: 本次超时时间（秒），None 时使用 default_timeout
         """
         effective_timeout = timeout if timeout is not None else self.default_timeout
-        loop = asyncio.get_running_loop()
-        future = loop.run_in_executor(
-            self.executor, self.registry.execute_tool, tool_name, input_data
-        )
+        coro = self.registry.execute_tool(tool_name, input_data)
 
         try:
             if effective_timeout:
                 self.logger.debug(
                     f"🔧 任务 [{tool_name}] 设置超时: {effective_timeout}s"
                 )
-                return await asyncio.wait_for(future, timeout=effective_timeout)
-            return await future
+                return await asyncio.wait_for(coro, timeout=effective_timeout)
+            return await coro
         except asyncio.TimeoutError:
             msg = f"工具执行超时 (限制: {effective_timeout}s)"
             self.logger.error(f"🔧 {msg}: {tool_name}")
@@ -109,7 +103,7 @@ class AsyncToolExecutor:
                 )
                 continue
 
-            coro = self.execute_tool_async(
+            coro = self.execute_tool(
                 tool_name,
                 input_data,
                 timeout=effective_timeout,
@@ -164,126 +158,46 @@ class AsyncToolExecutor:
         tasks = [{"tool_name": tool_name, "input_data": inp} for inp in input_list]
         return await self.execute_tools_parallel(tasks, timeout=timeout)
 
-    def close(self) -> None:
-        """关闭线程池，等待所有进行中的任务完成"""
-        self.logger.info("🔧 正在关闭异步工具执行器...")
-        self.executor.shutdown(wait=True)
-        self.logger.info("🔧 异步工具执行器已关闭")
-
-    def __enter__(self) -> "AsyncToolExecutor":
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.close()
-
-    async def __aenter__(self) -> "AsyncToolExecutor":
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.close()
-
 
 # 便捷函数
 async def run_parallel_tools(
     registry: ToolRegistry,
     tasks: list[dict[str, Any]],
-    max_workers: int = 4,
     timeout: float | None = None,
 ) -> list[dict[str, Any]]:
     """
     并发执行多个工具任务的便捷异步入口。
 
-    该函数会在内部创建 `AsyncToolExecutor`，并通过异步上下文自动管理线程池生命周期，
-    调用结束后自动释放资源。
-
     Args:
         registry: 工具注册表实例，用于按 `tool_name` 查找并执行对应工具。
         tasks: 工具任务列表。每项应包含 `tool_name`，可选 `input_data`。
-        max_workers: 线程池最大工作线程数，用于限制并发执行度。
         timeout: 单个任务的超时时间（秒）；None 表示不额外设置超时限制。
 
     Returns:
         与输入任务顺序一致的结果列表。每项包含 task_id、tool_name、input_data、
         result、status（"success" 或 "error"），错误场景下还会包含 error_type。
     """
-    async with AsyncToolExecutor(registry, max_workers, timeout) as executor:
-        return await executor.execute_tools_parallel(tasks)
+    executor = ToolExecutor(registry, timeout)
+    return await executor.execute_tools_parallel(tasks)
 
 
 async def run_batch_tool(
     registry: ToolRegistry,
     tool_name: str,
     input_list: list[str],
-    max_workers: int = 4,
     timeout: float | None = None,
 ) -> list[dict[str, Any]]:
     """
     对同一工具进行批量并发调用的便捷异步入口。
 
-    该函数将 `input_list` 自动转换为任务列表后并发执行，适用于“同一工具 + 多组输入”
-    的批处理场景。
-
     Args:
         registry: 工具注册表实例。
         tool_name: 目标工具名称。
         input_list: 同一工具的多组输入数据列表。
-        max_workers: 线程池最大工作线程数。
         timeout: 单个任务的超时时间（秒）；None 表示不额外设置超时限制。
 
     Returns:
         批量执行结果列表；每项包含任务标识、工具名、输入、执行结果与状态信息。
     """
-    async with AsyncToolExecutor(registry, max_workers, timeout) as executor:
-        return await executor.execute_tools_batch(tool_name, input_list)
-
-
-# 同步包装函数
-def run_parallel_tools_sync(
-    registry: ToolRegistry,
-    tasks: list[dict[str, Any]],
-    max_workers: int = 4,
-    timeout: float | None = None,
-) -> list[dict[str, Any]]:
-    """
-    `run_parallel_tools` 的同步包装函数。
-
-    通过 `asyncio.run(...)` 在同步上下文中驱动异步并发执行流程，便于在非 async 场景
-    下直接调用工具并发能力。
-
-    Args:
-        registry: 工具注册表实例。
-        tasks: 工具任务列表。每项应包含 `tool_name`，可选 `input_data`。
-        max_workers: 线程池最大工作线程数。
-        timeout: 单个任务的超时时间（秒）；None 表示不额外设置超时限制。
-
-    Returns:
-        并发执行结果列表，结构与 `run_parallel_tools` 返回值一致。
-    """
-    return asyncio.run(run_parallel_tools(registry, tasks, max_workers, timeout))
-
-
-def run_batch_tool_sync(
-    registry: ToolRegistry,
-    tool_name: str,
-    input_list: list[str],
-    max_workers: int = 4,
-    timeout: float | None = None,
-) -> list[dict[str, Any]]:
-    """
-    `run_batch_tool` 的同步包装函数。
-
-    在同步代码中批量并发调用同一工具，内部使用 `asyncio.run(...)` 执行异步任务。
-
-    Args:
-        registry: 工具注册表实例。
-        tool_name: 目标工具名称。
-        input_list: 同一工具的多组输入数据列表。
-        max_workers: 线程池最大工作线程数。
-        timeout: 单个任务的超时时间（秒）；None 表示不额外设置超时限制。
-
-    Returns:
-        批量执行结果列表，结构与 `run_batch_tool` 返回值一致。
-    """
-    return asyncio.run(
-        run_batch_tool(registry, tool_name, input_list, max_workers, timeout)
-    )
+    executor = ToolExecutor(registry, timeout)
+    return await executor.execute_tools_batch(tool_name, input_list)

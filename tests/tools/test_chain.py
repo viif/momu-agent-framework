@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -28,64 +28,68 @@ class TestToolChain:
 
         assert self.chain.steps[0].output_key == "my_result"
 
-    def test_execute_success(self):
+    @pytest.mark.asyncio
+    async def test_execute_success(self):
         """测试工具链成功执行"""
         self.chain.add_step("search", "{input}", output_key="search_res")
         self.chain.add_step("calculator", "计算: {search_res}", output_key="final_res")
 
-        mock_registry = Mock()
+        mock_registry = AsyncMock()
         mock_registry.execute_tool.side_effect = ["搜索结果", "计算结果: 42"]
 
-        result = self.chain.execute(mock_registry, "查询内容")
+        result = await self.chain.execute(mock_registry, "查询内容")
 
         assert result == "计算结果: 42"
         assert mock_registry.execute_tool.call_count == 2
         mock_registry.execute_tool.assert_any_call("search", "查询内容")
         mock_registry.execute_tool.assert_any_call("calculator", "计算: 搜索结果")
 
-    def test_execute_empty_chain_raises(self):
+    @pytest.mark.asyncio
+    async def test_execute_empty_chain_raises(self):
         """测试执行空工具链时抛出异常"""
-        mock_registry = Mock()
+        mock_registry = AsyncMock()
 
         with pytest.raises(ToolException, match="没有任何步骤"):
-            self.chain.execute(mock_registry, "input")
+            await self.chain.execute(mock_registry, "input")
 
-    def test_execute_missing_template_variable(self):
+    @pytest.mark.asyncio
+    async def test_execute_missing_template_variable(self):
         """测试模板变量缺失时抛出异常"""
-        # 模板需要 {missing_var}，但上下文中没有
         self.chain.add_step("search", "{missing_var}")
 
-        mock_registry = Mock()
+        mock_registry = AsyncMock()
 
         with pytest.raises(ToolException) as exc_info:
-            self.chain.execute(mock_registry, "input")
+            await self.chain.execute(mock_registry, "input")
 
         assert "模板变量缺失" in str(exc_info.value)
 
-    def test_execute_tool_raises_exception(self):
+    @pytest.mark.asyncio
+    async def test_execute_tool_raises_exception(self):
         """测试工具执行失败时抛出异常"""
         self.chain.add_step("search", "{input}")
 
-        mock_registry = Mock()
+        mock_registry = AsyncMock()
         mock_registry.execute_tool.side_effect = Exception("API 错误")
 
         with pytest.raises(ToolException) as exc_info:
-            self.chain.execute(mock_registry, "query")
+            await self.chain.execute(mock_registry, "query")
 
         assert "工具执行失败" in str(exc_info.value)
         assert "API 错误" in str(exc_info.value)
 
-    def test_execute_context_isolation(self):
+    @pytest.mark.asyncio
+    async def test_execute_context_isolation(self):
         """测试执行不会修改外部传入的 context"""
         external_context = {"existing_key": "value"}
         original_context = external_context.copy()
 
         self.chain.add_step("search", "{input}")
 
-        mock_registry = Mock()
+        mock_registry = AsyncMock()
         mock_registry.execute_tool.return_value = "result"
 
-        self.chain.execute(mock_registry, "input", context=external_context)
+        await self.chain.execute(mock_registry, "input", context=external_context)
 
         assert external_context == original_context
 
@@ -94,7 +98,7 @@ class TestToolChainManager:
     """测试 ToolChainManager 类"""
 
     def setup_method(self):
-        self.mock_registry = Mock()
+        self.mock_registry = AsyncMock()
         self.manager = ToolChainManager(self.mock_registry)
 
     def test_register_chain(self):
@@ -115,23 +119,26 @@ class TestToolChainManager:
 
         assert self.manager.chains["chain_a"] == chain_b
 
-    def test_execute_chain_success(self):
+    @pytest.mark.asyncio
+    async def test_execute_chain_success(self):
         """测试管理器成功执行工具链"""
         chain = ToolChain("research", "研究链")
         chain.add_step("search", "{input}")
 
         self.manager.register_chain(chain)
 
-        with patch.object(chain, "execute", return_value="最终结果") as mock_execute:
-            result = self.manager.execute_chain("research", "查询")
+        with patch.object(chain, "execute", new_callable=AsyncMock) as mock_execute:
+            mock_execute.return_value = "最终结果"
+            result = await self.manager.execute_chain("research", "查询")
 
             assert result == "最终结果"
-            mock_execute.assert_called_once_with(self.mock_registry, "查询", None)
+            mock_execute.assert_awaited_once_with(self.mock_registry, "查询", None)
 
-    def test_execute_chain_not_found(self):
+    @pytest.mark.asyncio
+    async def test_execute_chain_not_found(self):
         """测试执行不存在的工具链"""
         with pytest.raises(ToolException) as exc_info:
-            self.manager.execute_chain("non_existent", "input")
+            await self.manager.execute_chain("non_existent", "input")
 
         assert "不存在" in str(exc_info.value)
         assert "non_existent" in str(exc_info.value)

@@ -40,7 +40,7 @@ class ToolChain:
         resolved_key = output_key or f"step_{len(self.steps)}_result"
         self.steps.append(ChainStep(tool_name, input_template, resolved_key))
 
-    def execute(
+    async def execute(
         self,
         registry: ToolRegistry,
         initial_input: str,
@@ -62,7 +62,7 @@ class ToolChain:
 
         for i, step in enumerate(self.steps, 1):
             self.logger.info(f"🔧 步骤 {i}/{len(self.steps)}: 调用 [{step.tool_name}]")
-            exec_context[step.output_key] = self._execute_step(
+            exec_context[step.output_key] = await self._execute_step(
                 step, exec_context, registry
             )
             self.logger.info(f"🔧 步骤 {i} 完成")
@@ -71,7 +71,7 @@ class ToolChain:
         self.logger.info(f"🔧 工具链 '{self.name}' 执行完成")
         return final_result
 
-    def _execute_step(
+    async def _execute_step(
         self, step: ChainStep, context: dict[str, Any], registry: ToolRegistry
     ) -> str:
         """渲染输入模板并执行工具，返回结果字符串"""
@@ -84,7 +84,7 @@ class ToolChain:
         self.logger.debug(f"🔧 [{step.tool_name}] 输入: {tool_input[:50]}")
 
         try:
-            return registry.execute_tool(step.tool_name, tool_input)
+            return await registry.execute_tool(step.tool_name, tool_input)
         except ToolException:
             raise
         except Exception as e:
@@ -107,7 +107,7 @@ class ToolChainManager:
         self.chains[chain.name] = chain
         self.logger.info(f"🔧 工具链 '{chain.name}' 已注册")
 
-    def execute_chain(
+    async def execute_chain(
         self, chain_name: str, input_data: str, context: dict[str, Any] | None = None
     ) -> str:
         """执行指定的工具链"""
@@ -116,7 +116,7 @@ class ToolChainManager:
             msg = f"工具链 '{chain_name}' 不存在. 可用链: {available}"
             self.logger.error(f"🔧 {msg}")
             raise ToolException(msg)
-        return self.chains[chain_name].execute(self.registry, input_data, context)
+        return await self.chains[chain_name].execute(self.registry, input_data, context)
 
     def list_chains(self) -> list[str]:
         """列出所有工具链名称"""

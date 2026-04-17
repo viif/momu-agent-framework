@@ -99,7 +99,8 @@ class TestSearchTool:
         assert "tavily" not in tool.available_backends
         assert "serpapi" in tool.available_backends
 
-    def test_run_empty_query(self):
+    @pytest.mark.asyncio
+    async def test_run_empty_query(self):
         """测试空查询抛出异常"""
         with patch(
             "momu_agent.tools.builtin.search.importlib.import_module"
@@ -108,9 +109,10 @@ class TestSearchTool:
             tool = SearchTool(backend="tavily", tavily_api_key="fake")
 
         with pytest.raises(ToolException):
-            tool.run({"query": ""})
+            await tool.run({"query": ""})
 
-    def test_search_tavily_success(self):
+    @pytest.mark.asyncio
+    async def test_search_tavily_success(self):
         """测试 Tavily 搜索成功"""
         mock_client_instance = Mock()
         mock_response = {
@@ -132,13 +134,14 @@ class TestSearchTool:
                 tavily_client=mock_client_instance
             )
             tool = SearchTool(backend="tavily", tavily_api_key="fake")
-            result = tool.run({"query": "meaning of life"})
+            result = await tool.run({"query": "meaning of life"})
 
         assert "42" in result
         assert "Life Answer" in result
         mock_client_instance.search.assert_called_once()
 
-    def test_search_serpapi_success(self):
+    @pytest.mark.asyncio
+    async def test_search_serpapi_success(self):
         """测试 SerpApi 搜索成功"""
         mock_client_instance = Mock()
         mock_results = {
@@ -156,13 +159,14 @@ class TestSearchTool:
                 serpapi_client=mock_client_instance
             )
             tool = SearchTool(backend="serpapi", serpapi_key="fake")
-            result = tool.run({"query": "calculate 2+2"})
+            result = await tool.run({"query": "calculate 2+2"})
 
         assert "2 + 2 = 4" in result
         assert "Math" in result
         mock_client_instance.search.assert_called_once()
 
-    def test_hybrid_prefers_tavily(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_prefers_tavily(self):
         """测试混合模式优先使用 Tavily"""
         tavily_client_instance = Mock()
         serpapi_client_instance = Mock()
@@ -181,13 +185,14 @@ class TestSearchTool:
             tool = SearchTool(
                 backend="hybrid", tavily_api_key="fake", serpapi_key="fake"
             )
-            result = tool.run({"query": "test"})
+            result = await tool.run({"query": "test"})
 
         assert "Tavily Result" in result
         tavily_client_instance.search.assert_called_once()
         serpapi_client_instance.search.assert_not_called()
 
-    def test_hybrid_fallback_to_serpapi(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_fallback_to_serpapi(self):
         """测试混合模式 Tavily 失败时回退到 SerpApi"""
         tavily_client_instance = Mock()
         tavily_client_instance.search.side_effect = Exception("API Error")
@@ -209,13 +214,14 @@ class TestSearchTool:
             tool = SearchTool(
                 backend="hybrid", tavily_api_key="fake", serpapi_key="fake"
             )
-            result = tool.run({"query": "test"})
+            result = await tool.run({"query": "test"})
 
         assert "Fallback" in result
         tavily_client_instance.search.assert_called_once()
         serpapi_client_instance.search.assert_called_once()
 
-    def test_hybrid_tavily_unavailable(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_tavily_unavailable(self):
         """测试混合模式在没有 Tavily Key 时直接使用 SerpApi"""
         serpapi_client_instance = Mock()
         serpapi_client_instance.search.return_value = {"organic_results": []}
@@ -227,6 +233,6 @@ class TestSearchTool:
                 serpapi_client=serpapi_client_instance
             )
             tool = SearchTool(backend="hybrid", serpapi_key="fake")
-            tool.run({"query": "test"})
+            await tool.run({"query": "test"})
 
         serpapi_client_instance.search.assert_called_once()

@@ -11,7 +11,7 @@ class MockTool(Tool):
     def __init__(self):
         super().__init__(name="mock_tool", description="这是一个用于测试的工具")
 
-    def run(self, parameters: Dict[str, Any]) -> str:
+    async def run(self, parameters: Dict[str, Any]) -> str:
         return f"MockTool executed with: {parameters}"
 
     def get_parameters(self) -> List[ToolParameter]:

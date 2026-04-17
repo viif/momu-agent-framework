@@ -28,7 +28,7 @@ class Tool(ABC):
         self.logger = get_logger(__name__)
 
     @abstractmethod
-    def run(self, parameters: dict[str, Any]) -> str:
+    async def run(self, parameters: dict[str, Any]) -> str:
         """执行工具"""
         pass
 

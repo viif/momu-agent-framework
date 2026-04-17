@@ -15,7 +15,7 @@ class MockTool(Tool):
         super().__init__(name=name, description="Mock tool for testing")
         self.should_fail = should_fail
 
-    def run(self, parameters: dict[str, Any]) -> str:
+    async def run(self, parameters: dict[str, Any]) -> str:
         if self.should_fail:
             raise ToolException("Mock tool execution failed")
         return f"MockTool result: {parameters}"
@@ -62,24 +62,27 @@ class TestToolRegistry:
             mock_log.assert_called_once()
             assert registry.get_tool("mock_tool") == tool2
 
-    def test_execute_tool_success(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_tool_success(self, registry):
         """测试执行 Tool 对象成功"""
         tool = MockTool()
         registry.register_tool(tool)
 
-        result = registry.execute_tool("mock_tool", "hello")
+        result = await registry.execute_tool("mock_tool", "hello")
         assert "MockTool result" in result
 
-    def test_execute_tool_with_dict_params(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_tool_with_dict_params(self, registry):
         """测试执行 Tool 对象时传入参数字典"""
         tool = MockTool()
         registry.register_tool(tool)
 
-        result = registry.execute_tool("mock_tool", {"query": "hello"})
+        result = await registry.execute_tool("mock_tool", {"query": "hello"})
         assert "MockTool result" in result
         assert "query" in result
 
-    def test_execute_function_success(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_function_success(self, registry):
         """测试执行函数工具成功"""
 
         def my_func(text):
@@ -87,10 +90,23 @@ class TestToolRegistry:
 
         registry.register_function("my_func", "desc", my_func)
 
-        result = registry.execute_tool("my_func", "hello")
+        result = await registry.execute_tool("my_func", "hello")
         assert result == "Processed: hello"
 
-    def test_execute_function_with_dict_input(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_async_function_success(self, registry):
+        """测试执行异步函数工具成功"""
+
+        async def my_async_func(text):
+            return f"Processed async: {text}"
+
+        registry.register_function("my_async_func", "desc", my_async_func)
+
+        result = await registry.execute_tool("my_async_func", "hello")
+        assert result == "Processed async: hello"
+
+    @pytest.mark.asyncio
+    async def test_execute_function_with_dict_input(self, registry):
         """测试函数工具接收字典输入并自动提取 input"""
 
         def my_func(text):
@@ -98,10 +114,11 @@ class TestToolRegistry:
 
         registry.register_function("my_func", "desc", my_func)
 
-        result = registry.execute_tool("my_func", {"input": "hello"})
+        result = await registry.execute_tool("my_func", {"input": "hello"})
         assert result == "Processed: hello"
 
-    def test_execute_function_with_dict_query(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_function_with_dict_query(self, registry):
         """测试函数工具接收单键字典输入并提取该值"""
 
         def my_func(text):
@@ -109,10 +126,11 @@ class TestToolRegistry:
 
         registry.register_function("my_func", "desc", my_func)
 
-        result = registry.execute_tool("my_func", {"query": "hello"})
+        result = await registry.execute_tool("my_func", {"query": "hello"})
         assert result == "Processed: hello"
 
-    def test_execute_function_with_dict_expression(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_function_with_dict_expression(self, registry):
         """测试函数工具接收单键字典输入并提取该值"""
 
         def my_func(text):
@@ -120,10 +138,11 @@ class TestToolRegistry:
 
         registry.register_function("my_func", "desc", my_func)
 
-        result = registry.execute_tool("my_func", {"expression": "1+1"})
+        result = await registry.execute_tool("my_func", {"expression": "1+1"})
         assert result == "Processed: 1+1"
 
-    def test_execute_function_with_invalid_dict(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_function_with_invalid_dict(self, registry):
         """测试函数工具接收多键字典输入时抛出异常"""
 
         def my_func(text):
@@ -132,22 +151,25 @@ class TestToolRegistry:
         registry.register_function("my_func", "desc", my_func)
 
         with pytest.raises(ToolException, match="仅包含一个参数值的字典输入"):
-            registry.execute_tool("my_func", {"foo": "bar", "baz": "qux"})
+            await registry.execute_tool("my_func", {"foo": "bar", "baz": "qux"})
 
-    def test_execute_tool_not_found(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_tool_not_found(self, registry):
         """测试执行不存在的工具"""
         with pytest.raises(ToolException, match="未找到名为"):
-            registry.execute_tool("non_existent", "hello")
+            await registry.execute_tool("non_existent", "hello")
 
-    def test_execute_tool_exception(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_tool_exception(self, registry):
         """测试执行 Tool 抛出 ToolException"""
         tool = MockTool(should_fail=True)
         registry.register_tool(tool)
 
         with pytest.raises(ToolException, match="Mock tool execution failed"):
-            registry.execute_tool("mock_tool", "hello")
+            await registry.execute_tool("mock_tool", "hello")
 
-    def test_execute_function_exception(self, registry):
+    @pytest.mark.asyncio
+    async def test_execute_function_exception(self, registry):
         """测试执行函数抛出普通异常"""
 
         def bad_func(text):
@@ -159,7 +181,7 @@ class TestToolRegistry:
             with pytest.raises(
                 ToolException, match="执行工具 'bad_func' 时发生未知异常"
             ):
-                registry.execute_tool("bad_func", "hello")
+                await registry.execute_tool("bad_func", "hello")
             mock_log.assert_called_once()
 
     def test_get_tools_description(self, registry):

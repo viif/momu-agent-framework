@@ -6,17 +6,11 @@ from .core.config import Config
 from .core.exceptions import MomuAgentException
 from .core.llm import LLM
 from .core.message import Message
-from .tools.async_executor import (
-    AsyncToolExecutor,
-    run_batch_tool,
-    run_batch_tool_sync,
-    run_parallel_tools,
-    run_parallel_tools_sync,
-)
 from .tools.builtin.calculator import CalculatorTool, calculate
 from .tools.builtin.search import SearchTool, search
 from .tools.chain import ToolChain, ToolChainManager
 from .tools.registry import ToolRegistry, global_registry
+from .tools.tool_executor import ToolExecutor, run_batch_tool, run_parallel_tools
 
 __all__ = [
     "LLM",
@@ -31,9 +25,7 @@ __all__ = [
     "ToolChainManager",
     "ToolRegistry",
     "global_registry",
-    "AsyncToolExecutor",
+    "ToolExecutor",
     "run_parallel_tools",
-    "run_parallel_tools_sync",
     "run_batch_tool",
-    "run_batch_tool_sync",
 ]

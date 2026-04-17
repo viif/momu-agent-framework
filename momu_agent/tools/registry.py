@@ -1,6 +1,7 @@
 """工具注册表"""
 
-from typing import Any, Callable, NoReturn
+import inspect
+from typing import Any, Awaitable, Callable, NoReturn
 
 from ..core.exceptions import ToolException
 from ..utils.logger import get_logger
@@ -37,7 +38,10 @@ class ToolRegistry:
         self.logger.info(f"🔧 工具 '{tool.name}' 已注册。")
 
     def register_function(
-        self, name: str, description: str, func: Callable[[str], str]
+        self,
+        name: str,
+        description: str,
+        func: Callable[[str], str | Awaitable[str]],
     ):
         """
         直接注册函数作为工具（简便方式）
@@ -68,7 +72,7 @@ class ToolRegistry:
         """获取Tool对象"""
         return self._tools.get(name)
 
-    def get_function(self, name: str) -> Callable[[str], str] | None:
+    def get_function(self, name: str) -> Callable[[str], str | Awaitable[str]] | None:
         """获取工具函数"""
         func_info = self._functions.get(name)
         return func_info["func"] if func_info else None
@@ -80,7 +84,7 @@ class ToolRegistry:
             f"执行工具 '{name}' 时发生未知异常: {str(error)}"
         ) from error
 
-    def execute_tool(self, name: str, input_data: str | dict[str, Any]) -> str:
+    async def execute_tool(self, name: str, input_data: str | dict[str, Any]) -> str:
         """
         执行工具
 
@@ -104,7 +108,7 @@ class ToolRegistry:
                     if isinstance(input_data, dict)
                     else {"input": input_data}
                 )
-                return tool.run(params)
+                return await tool.run(params)
             except ToolException:
                 raise
             except Exception as e:
@@ -123,7 +127,10 @@ class ToolRegistry:
                 else:
                     function_input = input_data
 
-                return func(function_input)
+                result = func(function_input)
+                if inspect.isawaitable(result):
+                    return await result
+                return result
             except ToolException:
                 raise
             except Exception as e:
