@@ -12,6 +12,7 @@ import heapq
 from datetime import datetime, timedelta
 from typing import Any
 
+from ..core.exceptions import MemoryException
 from .base import BaseMemory, MemoryConfig, MemoryItem
 
 
@@ -39,92 +40,103 @@ class WorkingMemory(BaseMemory):
 
     def add(self, memory_item: MemoryItem) -> str:
         """添加工作记忆。"""
-        self._expire_old_memories()
-        priority = self._calculate_priority(memory_item)
+        try:
+            self._expire_old_memories()
+            priority = self._calculate_priority(memory_item)
 
-        heapq.heappush(
-            self.memory_heap, (-priority, memory_item.timestamp, memory_item)
-        )
-        self.memories.append(memory_item)
+            heapq.heappush(
+                self.memory_heap, (-priority, memory_item.timestamp, memory_item)
+            )
+            self.memories.append(memory_item)
 
-        self.current_tokens += len(memory_item.content.split())
-        self._enforce_capacity_limits()
+            self.current_tokens += len(memory_item.content.split())
+            self._enforce_capacity_limits()
 
-        return memory_item.id
+            return memory_item.id
+        except MemoryException:
+            raise
+        except Exception as e:
+            raise MemoryException(f"添加工作记忆失败: {e}") from e
+
 
     def retrieve(
         self, query: str, limit: int = 5, user_id: str | None = None, **_: Any
     ) -> list[MemoryItem]:
         """检索工作记忆。"""
-        self._expire_old_memories()
-        if not self.memories:
-            return []
+        try:
+            self._expire_old_memories()
+            if not self.memories:
+                return []
 
-        active_memories = [
-            memory
-            for memory in self.memories
-            if not memory.metadata.get("forgotten", False)
-        ]
-
-        filtered_memories = active_memories
-        if user_id:
-            filtered_memories = [
-                memory for memory in active_memories if memory.user_id == user_id
+            active_memories = [
+                memory
+                for memory in self.memories
+                if not memory.metadata.get("forgotten", False)
             ]
 
-        if not filtered_memories:
-            return []
+            filtered_memories = active_memories
+            if user_id:
+                filtered_memories = [
+                    memory for memory in active_memories if memory.user_id == user_id
+                ]
 
-        vector_scores: dict[str, float] = {}
-        try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            from sklearn.metrics.pairwise import cosine_similarity
+            if not filtered_memories:
+                return []
 
-            documents = [memory.content for memory in filtered_memories]
-            vectorizer = TfidfVectorizer(stop_words=None, lowercase=True)
-            doc_vectors = vectorizer.fit_transform(documents)
-            query_vector = vectorizer.transform([query])
-            similarities = cosine_similarity(query_vector, doc_vectors).flatten()
+            vector_scores: dict[str, float] = {}
+            try:
+                from sklearn.feature_extraction.text import TfidfVectorizer
+                from sklearn.metrics.pairwise import cosine_similarity
 
-            for index, memory in enumerate(filtered_memories):
-                vector_scores[memory.id] = float(similarities[index])
-        except Exception:
-            vector_scores = {}
+                documents = [memory.content for memory in filtered_memories]
+                vectorizer = TfidfVectorizer(stop_words=None, lowercase=True)
+                doc_vectors = vectorizer.fit_transform(documents)
+                query_vector = vectorizer.transform([query])
+                similarities = cosine_similarity(query_vector, doc_vectors).flatten()
 
-        query_lower = query.lower()
-        scored_memories: list[tuple[float, MemoryItem]] = []
+                for index, memory in enumerate(filtered_memories):
+                    vector_scores[memory.id] = float(similarities[index])
+            except Exception:
+                vector_scores = {}
 
-        for memory in filtered_memories:
-            content_lower = memory.content.lower()
-            vector_score = vector_scores.get(memory.id, 0.0)
+            query_lower = query.lower()
+            scored_memories: list[tuple[float, MemoryItem]] = []
 
-            keyword_score = 0.0
-            if query_lower in content_lower:
-                keyword_score = len(query_lower) / len(content_lower)
-            else:
-                query_words = set(query_lower.split())
-                content_words = set(content_lower.split())
-                union = query_words.union(content_words)
-                intersection = query_words.intersection(content_words)
-                if union and intersection:
-                    keyword_score = len(intersection) / len(union) * 0.8
+            for memory in filtered_memories:
+                content_lower = memory.content.lower()
+                vector_score = vector_scores.get(memory.id, 0.0)
 
-            if vector_score > 0:
-                base_relevance = vector_score * 0.7 + keyword_score * 0.3
-            else:
-                base_relevance = keyword_score
+                keyword_score = 0.0
+                if query_lower in content_lower:
+                    keyword_score = len(query_lower) / len(content_lower)
+                else:
+                    query_words = set(query_lower.split())
+                    content_words = set(content_lower.split())
+                    union = query_words.union(content_words)
+                    intersection = query_words.intersection(content_words)
+                    if union and intersection:
+                        keyword_score = len(intersection) / len(union) * 0.8
 
-            time_decay = self._calculate_time_decay(memory.timestamp)
-            base_relevance *= time_decay
+                if vector_score > 0:
+                    base_relevance = vector_score * 0.7 + keyword_score * 0.3
+                else:
+                    base_relevance = keyword_score
 
-            importance_weight = 0.8 + (memory.importance * 0.4)
-            final_score = base_relevance * importance_weight
+                time_decay = self._calculate_time_decay(memory.timestamp)
+                base_relevance *= time_decay
 
-            if final_score > 0:
-                scored_memories.append((final_score, memory))
+                importance_weight = 0.8 + (memory.importance * 0.4)
+                final_score = base_relevance * importance_weight
 
-        scored_memories.sort(key=lambda item: item[0], reverse=True)
-        return [memory for _, memory in scored_memories[:limit]]
+                if final_score > 0:
+                    scored_memories.append((final_score, memory))
+
+            scored_memories.sort(key=lambda item: item[0], reverse=True)
+            return [memory for _, memory in scored_memories[:limit]]
+        except MemoryException:
+            raise
+        except Exception as e:
+            raise MemoryException(f"检索工作记忆失败: {e}") from e
 
     def update(
         self,

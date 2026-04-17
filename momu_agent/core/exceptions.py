@@ -29,3 +29,9 @@ class ToolException(MomuAgentException):
     """工具相关异常"""
 
     pass
+
+
+class MemoryException(MomuAgentException):
+    """记忆相关异常"""
+
+    pass
