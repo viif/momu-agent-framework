@@ -165,7 +165,9 @@ class ReflectionAgent(Agent):
                 # 反思
                 last_result = self.memory.get_last_execution()
                 feedback = await self._call_llm(
-                    self.prompts["reflect"].format(task=input_text, content=last_result),
+                    self.prompts["reflect"].format(
+                        task=input_text, content=last_result
+                    ),
                     **kwargs,
                 )
                 self.memory.add_record("reflection", feedback)
@@ -198,7 +200,6 @@ class ReflectionAgent(Agent):
             self.logger.error(error_msg)
             self.add_message(Message(error_msg, "assistant"))
             return error_msg
-
 
     def _build_tool_system_prompt(self) -> str:
         """构建包含工具信息的系统提示词"""
