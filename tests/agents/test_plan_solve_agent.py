@@ -236,7 +236,7 @@ class MockCalculatorTool:
             )
         ]
 
-    def run(self, parameters: dict) -> str:
+    async def run(self, parameters: dict) -> str:
         return str(eval(parameters["expression"]))  # noqa: S307
 
 

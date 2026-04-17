@@ -23,7 +23,7 @@ class MockSearchTool:
             )
         ]
 
-    def run(self, parameters):
+    async def run(self, parameters):
         query = parameters.get("query", "未知")
         return f"搜索结果：关于 {query} 的信息"
 
@@ -47,7 +47,7 @@ class MockCalculatorTool:
             )
         ]
 
-    def run(self, parameters):
+    async def run(self, parameters):
         return "计算结果：150"
 
 

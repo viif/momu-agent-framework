@@ -7,8 +7,8 @@ from ..core.agent import Agent
 from ..core.exceptions import AgentException
 from ..core.llm import LLM
 from ..core.message import Message
-from ..tools.async_executor import run_parallel_tools
 from ..tools.registry import ToolRegistry
+from ..tools.tool_executor import run_parallel_tools
 from ..utils.logger import get_logger
 from .parser.tool_parser import ToolParser
 

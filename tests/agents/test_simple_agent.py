@@ -24,7 +24,7 @@ class MockSearchTool:
             )
         ]
 
-    def run(self, parameters):
+    async def run(self, parameters):
         """
         执行工具
         Args:
