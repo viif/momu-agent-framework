@@ -17,10 +17,10 @@ momu_agent/
 │   ├── llm.py          # LLM 封装（OpenAI 兼容接口）
 │   └── message.py      # 消息数据结构
 ├── tools/              # 工具系统
-│   ├── base.py         # Tool 抽象基类、ToolParameter
-│   ├── registry.py     # ToolRegistry（支持 Tool 对象和函数两种注册方式）
-│   ├── chain.py        # ToolChain / ToolChainManager（顺序工具链）
-│   ├── async_executor.py # 异步并发工具执行器
+│   ├── base.py         # Tool 抽象基类、ToolParameter（Tool.run 为 async）
+│   ├── registry.py     # ToolRegistry（execute_tool 为 async，支持 Tool 对象与函数两种注册方式）
+│   ├── chain.py        # ToolChain / ToolChainManager（顺序工具链，execute 为 async）
+│   ├── executor.py # 异步并发工具执行器
 │   └── builtin/        # 内置工具
 │       ├── calculator.py  # 计算器工具
 │       └── search.py      # 搜索工具（Tavily / SerpAPI）
@@ -85,7 +85,9 @@ cp .env.example .env
 ## 异步约定
 
 - `Agent.run()` 和 `Agent.stream_run()` 均为 `async` 方法，调用时需 `await` / `async for`
-- 新增 Agent 子类必须实现 `async def run()`
+- `Tool.run()` 为 `async` 抽象方法；新增 Tool 子类需实现 `async def run()`
+- `ToolRegistry.execute_tool()` 为 `async` 方法；Tool 对象调用与函数工具调用统一走异步执行路径
+- `ToolChain.execute()` / `ToolChainManager.execute_chain()` 为 `async` 方法
 - 示例和脚本入口使用 `asyncio.run(main())`
 - 测试使用 pytest-asyncio，配置 `asyncio_mode = "auto"`，async 测试函数无需额外标注
 

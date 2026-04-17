@@ -4,11 +4,11 @@
 
 ## 🚀 特性
 
-- **全异步设计** — `Agent.run()` 为 `async` 方法，天然支持高并发场景
+- **全异步设计** — `Agent.run()` 与工具执行主路径均为 `async`，天然支持高并发场景
 - **Agent 体系** — 抽象基类 `Agent` + 四种开箱即用的 Agent：`SimpleAgent`（多轮对话/流式输出）、`ReActAgent`（Thought→Action→Observation 循环）、`PlanSolveAgent`（规划分解→逐步执行）、`ReflectionAgent`（生成→反思迭代→精炼）
-- **工具系统** — `ToolRegistry` 统一管理工具，支持 `Tool` 对象和函数两种注册方式
-- **工具链** — `ToolChain` / `ToolChainManager` 支持多工具顺序编排
-- **并发执行** — `AsyncToolExecutor` 异步并发调用多个工具
+- **工具系统** — `ToolRegistry` 统一管理工具，支持 `Tool` 对象、同步函数和异步函数注册，工具执行入口为异步
+- **工具链** — `ToolChain` / `ToolChainManager` 支持多工具顺序编排（异步执行）
+- **并发执行** — `ToolExecutor` 异步并发调用多个工具（支持超时控制与结果聚合）
 - **流式输出** — `SimpleAgent.stream_run` 支持逐 token 异步流式响应
 - **内置工具** — 计算器（支持四则运算、幂运算、`sqrt/sin/cos/log` 等数学函数）、联网搜索（Tavily / SerpAPI）
 - **OpenAI 兼容** — `LLM` 接入任何兼容 OpenAI 接口的模型

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from momu_agent.core.exceptions import ToolException
-from momu_agent.tools.tool_executor import (
+from momu_agent.tools.executor import (
     ToolExecutor,
     run_batch_tool,
     run_parallel_tools,

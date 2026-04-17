@@ -5,7 +5,7 @@ from .builtin.calculator import CalculatorTool
 from .builtin.search import SearchTool
 from .chain import ChainStep, ToolChain, ToolChainManager
 from .registry import ToolRegistry, global_registry
-from .tool_executor import ToolExecutor, run_batch_tool, run_parallel_tools
+from .executor import ToolExecutor, run_batch_tool, run_parallel_tools
 
 __all__ = [
     "Tool",
