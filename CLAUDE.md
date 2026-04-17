@@ -40,8 +40,8 @@ momu_agent/
 本项目使用 `uv` 进行依赖和环境管理。
 
 ```bash
-# 安装依赖
-uv sync --frozen --all-extras
+# 开发环境安装
+uv sync --all-extras
 
 # 运行示例
 uv run python examples/simple_agent_demo.py

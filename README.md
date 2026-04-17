@@ -15,13 +15,32 @@
 
 ## ⬇️ 安装
 
-需要 Python 3.11+，使用 [uv](https://docs.astral.sh/uv/) 管理依赖：
+需要 Python 3.11+，使用 [uv](https://docs.astral.sh/uv/) 管理依赖。
+
+### 基础功能
+
+仅安装核心依赖：
 
 ```bash
-git clone https://github.com/your-username/momu-agent-framework.git
-cd momu-agent-framework
-uv sync --frozen --all-extras
+uv sync
 ```
+
+### 拓展功能
+
+按需安装不同扩展功能：
+
+- 搜索能力（`search`）：
+
+```bash
+uv sync --extra search
+```
+
+- 记忆能力（`memory`）：
+
+```bash
+uv sync --extra memory
+```
+
 
 ## ⚙️ 配置
 
