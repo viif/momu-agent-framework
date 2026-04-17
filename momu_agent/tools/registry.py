@@ -1,6 +1,6 @@
 """工具注册表"""
 
-from typing import Any, Callable
+from typing import Any, Callable, NoReturn
 
 from ..core.exceptions import ToolException
 from ..utils.logger import get_logger
@@ -68,55 +68,70 @@ class ToolRegistry:
         """获取Tool对象"""
         return self._tools.get(name)
 
-    def get_function(self, name: str) -> Callable | None:
+    def get_function(self, name: str) -> Callable[[str], str] | None:
         """获取工具函数"""
         func_info = self._functions.get(name)
         return func_info["func"] if func_info else None
 
-    def execute_tool(self, name: str, input_text: str) -> str:
+    def _raise_unknown_exception(self, name: str, error: Exception) -> NoReturn:
+        """统一包装并抛出工具执行中的未知异常"""
+        self.logger.exception(f"🔧 工具 '{name}' 发生未知异常: {error}")
+        raise ToolException(
+            f"执行工具 '{name}' 时发生未知异常: {str(error)}"
+        ) from error
+
+    def execute_tool(self, name: str, input_data: str | dict[str, Any]) -> str:
         """
         执行工具
 
         Args:
             name: 工具名称
-            input_text: 输入参数
+            input_data: 输入参数（字符串或参数字典）
 
         Returns:
             工具执行结果
+
+        Raises:
+            ToolException: 工具执行失败或工具不存在
         """
         # 优先查找Tool对象
         if name in self._tools:
             tool = self._tools[name]
             try:
-                # 若 input_text 已经是解析好的参数字典，直接传入；否则包装为 {"input": ...}
+                # 若 input_data 已经是解析好的参数字典，直接传入；否则包装为 {"input": ...}
                 params = (
-                    input_text
-                    if isinstance(input_text, dict)
-                    else {"input": input_text}
+                    input_data
+                    if isinstance(input_data, dict)
+                    else {"input": input_data}
                 )
                 return tool.run(params)
-            except ToolException as e:
-                self.logger.error(f"🔧 工具 '{name}' 执行失败: {e}")
-                return f"错误：执行工具 '{name}' 时发生异常: {str(e)}"
+            except ToolException:
+                raise
             except Exception as e:
-                self.logger.exception(f"🔧 工具 '{name}' 发生未知异常: {e}")
-                return f"错误：执行工具 '{name}' 时发生未知异常: {str(e)}"
+                self._raise_unknown_exception(name, e)
 
         # 查找函数工具
         elif name in self._functions:
             func = self._functions[name]["func"]
             try:
-                return func(input_text)
-            except ToolException as e:
-                self.logger.error(f"🔧 工具 '{name}' 执行失败: {e}")
-                return f"错误：执行工具 '{name}' 时发生异常: {str(e)}"
+                if isinstance(input_data, dict):
+                    if len(input_data) != 1:
+                        raise ToolException(
+                            "函数工具需要字符串输入，或仅包含一个参数值的字典输入"
+                        )
+                    function_input = str(next(iter(input_data.values())))
+                else:
+                    function_input = input_data
+
+                return func(function_input)
+            except ToolException:
+                raise
             except Exception as e:
-                self.logger.exception(f"🔧 工具 '{name}' 发生未知异常: {e}")
-                return f"错误：执行工具 '{name}' 时发生未知异常: {str(e)}"
+                self._raise_unknown_exception(name, e)
 
         else:
             self.logger.error(f"🔧 未找到名为 '{name}' 的工具。")
-            return f"错误：未找到名为 '{name}' 的工具。"
+            raise ToolException(f"未找到名为 '{name}' 的工具。")
 
     def get_tools_description(self) -> str:
         """

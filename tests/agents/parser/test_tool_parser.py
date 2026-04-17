@@ -195,3 +195,35 @@ def test_has_tool_calls(parser):
 
     assert parser.has_tool_calls(text_with) is True
     assert parser.has_tool_calls(text_without) is False
+
+
+def test_prepare_tool_task_with_function_tool(parser):
+    """测试 prepare_tool_task 支持函数工具分支"""
+
+    class MockRegistry:
+        def get_tool(self, name):
+            return None
+
+        def get_function(self, name):
+            return (lambda text: f"ok:{text}") if name == "func_tool" else None
+
+    task = parser.prepare_tool_task("func_tool", '{"input": "hello"}', MockRegistry())
+
+    assert task["tool_name"] == "func_tool"
+    assert task["input_data"] == {"input": "hello"}
+
+
+def test_prepare_tool_task_not_registered(parser):
+    """测试 prepare_tool_task 在工具未注册时返回 error"""
+
+    class MockRegistry:
+        def get_tool(self, name):
+            return None
+
+        def get_function(self, name):
+            return None
+
+    task = parser.prepare_tool_task("missing", "{}", MockRegistry())
+
+    assert task["tool_name"] == "missing"
+    assert task["error"] == "工具未注册"

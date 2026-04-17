@@ -51,6 +51,7 @@ def mock_registry():
     registry.get_tool = Mock(
         side_effect=lambda name: MockSearchTool() if name == "search" else None
     )
+    registry.get_function = Mock(return_value=None)
 
     return registry
 

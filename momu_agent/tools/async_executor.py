@@ -25,7 +25,10 @@ class AsyncToolExecutor:
         self.logger.info(f"🔧 异步工具执行器已初始化 (超时限制: {default_timeout}s)")
 
     async def execute_tool_async(
-        self, tool_name: str, input_data: Any, timeout: float | None = None
+        self,
+        tool_name: str,
+        input_data: str | dict[str, Any],
+        timeout: float | None = None,
     ) -> str:
         """
         在线程池中异步执行单个工具，超时或失败时抛出 ToolException
@@ -65,7 +68,7 @@ class AsyncToolExecutor:
         并发执行多个工具，结果顺序与输入顺序一致
 
         Args:
-            tasks: 任务列表，每项需含 tool_name，可含 input_data
+            tasks: 任务列表，每项需含 tool_name，可含 input_data 或预处理 error
             timeout: 每个任务的超时时间（秒）
 
         Returns:
@@ -86,46 +89,70 @@ class AsyncToolExecutor:
             f"🔧 开始并行执行 {len(valid)} 个工具任务 (超时限制: {effective_timeout}s)"
         )
 
-        coros = [
-            self.execute_tool_async(
-                t["tool_name"], t.get("input_data", ""), timeout=effective_timeout
-            )
-            for _, t in valid
-        ]
-        outcomes = await asyncio.gather(*coros, return_exceptions=True)
+        ordered_results: list[dict[str, Any] | None] = [None] * len(valid)
+        runnable: list[tuple[int, int, dict[str, Any], Any]] = []
 
-        results: list[dict[str, Any]] = []
-        for (i, task), outcome in zip(valid, outcomes):
+        for pos, (i, task) in enumerate(valid):
+            tool_name = task["tool_name"]
+            input_data = task.get("input_data", "")
+            base = {"task_id": i, "tool_name": tool_name, "input_data": input_data}
+
+            if task.get("error"):
+                ordered_results[pos] = {
+                    **base,
+                    "result": str(task["error"]),
+                    "status": "error",
+                    "error_type": "TaskPreparationError",
+                }
+                self.logger.warning(
+                    f"🔧 任务 {i + 1} 预处理失败: {tool_name} - {task['error']}"
+                )
+                continue
+
+            coro = self.execute_tool_async(
+                tool_name,
+                input_data,
+                timeout=effective_timeout,
+            )
+            runnable.append((pos, i, task, coro))
+
+        outcomes = await asyncio.gather(
+            *(coro for _, _, _, coro in runnable),
+            return_exceptions=True,
+        )
+
+        for (pos, i, task, _), outcome in zip(runnable, outcomes):
             tool_name = task["tool_name"]
             input_data = task.get("input_data", "")
             base = {"task_id": i, "tool_name": tool_name, "input_data": input_data}
 
             if isinstance(outcome, ToolException):
-                results.append(
-                    {
-                        **base,
-                        "result": str(outcome),
-                        "status": "error",
-                        "error_type": "ToolException",
-                    }
-                )
+                ordered_results[pos] = {
+                    **base,
+                    "result": str(outcome),
+                    "status": "error",
+                    "error_type": "ToolException",
+                }
                 self.logger.warning(
                     f"🔧 任务 {i + 1} 业务异常/超时: {tool_name} - {outcome}"
                 )
             elif isinstance(outcome, Exception):
-                results.append(
-                    {
-                        **base,
-                        "result": str(outcome),
-                        "status": "error",
-                        "error_type": "SystemException",
-                    }
-                )
+                ordered_results[pos] = {
+                    **base,
+                    "result": str(outcome),
+                    "status": "error",
+                    "error_type": "SystemException",
+                }
                 self.logger.error(f"🔧 任务 {i + 1} 系统错误: {tool_name} - {outcome}")
             else:
-                results.append({**base, "result": outcome, "status": "success"})
+                ordered_results[pos] = {
+                    **base,
+                    "result": outcome,
+                    "status": "success",
+                }
                 self.logger.info(f"🔧 任务 {i + 1} 完成: {tool_name}")
 
+        results = [r for r in ordered_results if r is not None]
         success_count = sum(1 for r in results if r["status"] == "success")
         self.logger.info(f"🔧 并行执行完成，成功: {success_count}/{len(results)}")
         return results

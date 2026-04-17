@@ -75,6 +75,7 @@ def mock_registry():
         return None
 
     registry.get_tool = Mock(side_effect=get_tool_side_effect)
+    registry.get_function = Mock(return_value=None)
     return registry
 
 

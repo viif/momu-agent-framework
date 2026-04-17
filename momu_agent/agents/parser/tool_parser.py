@@ -136,10 +136,16 @@ class ToolParser:
             return {"tool_name": tool_name, "error": "未配置工具注册表"}
         try:
             tool_obj = registry.get_tool(tool_name)
-            if not tool_obj:
-                return {"tool_name": tool_name, "error": "工具未注册"}
-            params = self.parse_typed_parameters(tool_name, raw_params, tool_obj)
-            return {"tool_name": tool_name, "input_data": params}
+            if tool_obj:
+                params = self.parse_typed_parameters(tool_name, raw_params, tool_obj)
+                return {"tool_name": tool_name, "input_data": params}
+
+            func_obj = registry.get_function(tool_name)
+            if func_obj:
+                params = self.parse_parameters(raw_params)
+                return {"tool_name": tool_name, "input_data": params}
+
+            return {"tool_name": tool_name, "error": "工具未注册"}
         except Exception as e:
             return {"tool_name": tool_name, "error": str(e)}
 

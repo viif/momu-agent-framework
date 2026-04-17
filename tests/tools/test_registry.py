@@ -70,6 +70,15 @@ class TestToolRegistry:
         result = registry.execute_tool("mock_tool", "hello")
         assert "MockTool result" in result
 
+    def test_execute_tool_with_dict_params(self, registry):
+        """测试执行 Tool 对象时传入参数字典"""
+        tool = MockTool()
+        registry.register_tool(tool)
+
+        result = registry.execute_tool("mock_tool", {"query": "hello"})
+        assert "MockTool result" in result
+        assert "query" in result
+
     def test_execute_function_success(self, registry):
         """测试执行函数工具成功"""
 
@@ -81,20 +90,62 @@ class TestToolRegistry:
         result = registry.execute_tool("my_func", "hello")
         assert result == "Processed: hello"
 
+    def test_execute_function_with_dict_input(self, registry):
+        """测试函数工具接收字典输入并自动提取 input"""
+
+        def my_func(text):
+            return f"Processed: {text}"
+
+        registry.register_function("my_func", "desc", my_func)
+
+        result = registry.execute_tool("my_func", {"input": "hello"})
+        assert result == "Processed: hello"
+
+    def test_execute_function_with_dict_query(self, registry):
+        """测试函数工具接收单键字典输入并提取该值"""
+
+        def my_func(text):
+            return f"Processed: {text}"
+
+        registry.register_function("my_func", "desc", my_func)
+
+        result = registry.execute_tool("my_func", {"query": "hello"})
+        assert result == "Processed: hello"
+
+    def test_execute_function_with_dict_expression(self, registry):
+        """测试函数工具接收单键字典输入并提取该值"""
+
+        def my_func(text):
+            return f"Processed: {text}"
+
+        registry.register_function("my_func", "desc", my_func)
+
+        result = registry.execute_tool("my_func", {"expression": "1+1"})
+        assert result == "Processed: 1+1"
+
+    def test_execute_function_with_invalid_dict(self, registry):
+        """测试函数工具接收多键字典输入时抛出异常"""
+
+        def my_func(text):
+            return f"Processed: {text}"
+
+        registry.register_function("my_func", "desc", my_func)
+
+        with pytest.raises(ToolException, match="仅包含一个参数值的字典输入"):
+            registry.execute_tool("my_func", {"foo": "bar", "baz": "qux"})
+
     def test_execute_tool_not_found(self, registry):
         """测试执行不存在的工具"""
-        result = registry.execute_tool("non_existent", "hello")
-        assert result.startswith("错误：未找到名为")
+        with pytest.raises(ToolException, match="未找到名为"):
+            registry.execute_tool("non_existent", "hello")
 
     def test_execute_tool_exception(self, registry):
         """测试执行 Tool 抛出 ToolException"""
         tool = MockTool(should_fail=True)
         registry.register_tool(tool)
 
-        with patch.object(registry.logger, "error") as mock_log:
-            result = registry.execute_tool("mock_tool", "hello")
-            mock_log.assert_called_once()
-            assert result.startswith("错误：执行工具")
+        with pytest.raises(ToolException, match="Mock tool execution failed"):
+            registry.execute_tool("mock_tool", "hello")
 
     def test_execute_function_exception(self, registry):
         """测试执行函数抛出普通异常"""
@@ -105,9 +156,11 @@ class TestToolRegistry:
         registry.register_function("bad_func", "desc", bad_func)
 
         with patch.object(registry.logger, "exception") as mock_log:
-            result = registry.execute_tool("bad_func", "hello")
+            with pytest.raises(
+                ToolException, match="执行工具 'bad_func' 时发生未知异常"
+            ):
+                registry.execute_tool("bad_func", "hello")
             mock_log.assert_called_once()
-            assert result.startswith("错误：执行工具")
 
     def test_get_tools_description(self, registry):
         """测试获取工具描述字符串"""

@@ -295,6 +295,7 @@ def mock_registry():
         return_value="calculator: 计算数学表达式\n  - expression (string, 必填): 要计算的数学表达式"
     )
     registry.get_tool = Mock(return_value=MockCalculatorTool())
+    registry.get_function = Mock(return_value=None)
     return registry
 
 

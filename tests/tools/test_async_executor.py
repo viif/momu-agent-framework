@@ -99,19 +99,14 @@ class TestAsyncToolExecutor:
         executor.close()
 
     @pytest.mark.asyncio
-    async def test_execute_tools_parallel_with_error(self):
-        """测试并行执行中包含失败的任务"""
+    async def test_execute_tools_parallel_with_preparation_error(self):
+        """测试任务预处理失败时短路为 error，不触发 execute_tool 调用"""
         tasks = [
-            {"tool_name": "good", "input_data": "ok"},
-            {"tool_name": "bad", "input_data": "err"},
+            {"tool_name": "search", "input_data": "q1"},
+            {"tool_name": "bad_tool", "error": "工具未注册"},
         ]
 
-        def side_effect(name, data):
-            if name == "bad":
-                raise Exception("工具报错")
-            return "ok"
-
-        self.mock_registry.execute_tool.side_effect = side_effect
+        self.mock_registry.execute_tool.side_effect = lambda name, data: "ok"
         executor = AsyncToolExecutor(self.mock_registry)
 
         results = await executor.execute_tools_parallel(tasks)
@@ -119,7 +114,9 @@ class TestAsyncToolExecutor:
         assert len(results) == 2
         assert results[0]["status"] == "success"
         assert results[1]["status"] == "error"
-        assert "工具报错" in results[1]["result"]
+        assert results[1]["error_type"] == "TaskPreparationError"
+        assert "工具未注册" in results[1]["result"]
+        self.mock_registry.execute_tool.assert_called_once_with("search", "q1")
         executor.close()
 
     @pytest.mark.asyncio
