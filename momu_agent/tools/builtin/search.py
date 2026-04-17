@@ -1,9 +1,7 @@
 """搜索工具"""
 
+import importlib
 from typing import Any
-
-from serpapi import Client as GoogleSearchClient
-from tavily import TavilyClient
 
 from ...core.exceptions import ToolException
 from ...utils.logger import get_logger
@@ -38,25 +36,42 @@ class SearchTool(Tool):
         self.serpapi_key = serpapi_key
         self.available_backends = []
 
-        self.tavily_client: TavilyClient | None = None
-        self.serpapi_client: GoogleSearchClient | None = None
+        self.tavily_client: Any | None = None
+        self.serpapi_client: Any | None = None
 
         self._setup_backends()
-        self._init_clients()
 
     def _setup_backends(self):
-        """设置搜索后端，如果没有可用后端则抛出异常"""
+        """设置搜索后端并初始化客户端，如果没有可用后端则抛出异常"""
         has_valid_backend = False
 
         if self.tavily_api_key:
-            self.available_backends.append("tavily")
-            has_valid_backend = True
+            try:
+                tavily_module = importlib.import_module("tavily")
+                tavily_client_cls = getattr(tavily_module, "TavilyClient")
+                self.tavily_client = tavily_client_cls(api_key=self.tavily_api_key)
+                self.available_backends.append("tavily")
+                has_valid_backend = True
+                self.logger.debug("🔧 Tavily 客户端已初始化")
+            except ImportError:
+                self.logger.warning("🔧 Tavily 依赖未安装，该后端不可用")
+            except Exception as e:
+                self.logger.warning(f"🔧 Tavily 客户端初始化失败，该后端不可用: {e}")
         else:
             self.logger.warning("🔧 Tavily API Key 未设置")
 
         if self.serpapi_key:
-            self.available_backends.append("serpapi")
-            has_valid_backend = True
+            try:
+                serpapi_module = importlib.import_module("serpapi")
+                serpapi_client_cls = getattr(serpapi_module, "Client")
+                self.serpapi_client = serpapi_client_cls(api_key=self.serpapi_key)
+                self.available_backends.append("serpapi")
+                has_valid_backend = True
+                self.logger.debug("🔧 SerpApi 客户端已初始化")
+            except ImportError:
+                self.logger.warning("🔧 SerpApi 依赖未安装，该后端不可用")
+            except Exception as e:
+                self.logger.warning(f"🔧 SerpApi 客户端初始化失败，该后端不可用: {e}")
         else:
             self.logger.warning("🔧 SerpApi API Key 未设置")
 
@@ -72,26 +87,16 @@ class SearchTool(Tool):
             )
         elif self.backend == "tavily" and "tavily" not in self.available_backends:
             raise ToolException(
-                "配置错误：后端设置为 'tavily'，但 Tavily 未设置（检查 Key）"
+                "配置错误：后端设置为 'tavily'，但 Tavily 不可用（检查 Key 和依赖）"
             )
         elif self.backend == "serpapi" and "serpapi" not in self.available_backends:
             raise ToolException(
-                "配置错误：后端设置为 'serpapi'，但 SerpApi 未设置（检查 Key）"
+                "配置错误：后端设置为 'serpapi'，但 SerpApi 不可用（检查 Key 和依赖）"
             )
         elif self.backend not in ["tavily", "serpapi", "hybrid"]:
             raise ToolException(
                 f"配置错误：不支持的搜索后端 '{self.backend}'。请使用 'tavily', 'serpapi', 或 'hybrid'"
             )
-
-    def _init_clients(self):
-        """初始化客户端实例"""
-        if self.tavily_api_key:
-            self.tavily_client = TavilyClient(api_key=self.tavily_api_key)
-            self.logger.debug("🔧 Tavily 客户端已初始化")
-
-        if self.serpapi_key:
-            self.serpapi_client = GoogleSearchClient(api_key=self.serpapi_key)
-            self.logger.debug("🔧 SerpApi 客户端已初始化")
 
     def run(self, parameters: dict[str, Any]) -> str:
         """

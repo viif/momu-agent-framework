@@ -6,6 +6,35 @@ from momu_agent.core.exceptions import ToolException
 from momu_agent.tools import SearchTool
 
 
+def _build_import_side_effect(
+    tavily_client: Mock | None = None,
+    serpapi_client: Mock | None = None,
+    tavily_import_error: bool = False,
+    serpapi_import_error: bool = False,
+):
+    tavily_client = tavily_client or Mock()
+    serpapi_client = serpapi_client or Mock()
+
+    def _import_module(name: str):
+        if name == "tavily":
+            if tavily_import_error:
+                raise ImportError("No module named 'tavily'")
+            module = Mock()
+            module.TavilyClient = Mock(return_value=tavily_client)
+            return module
+
+        if name == "serpapi":
+            if serpapi_import_error:
+                raise ImportError("No module named 'serpapi'")
+            module = Mock()
+            module.Client = Mock(return_value=serpapi_client)
+            return module
+
+        raise ImportError(f"No module named '{name}'")
+
+    return _import_module
+
+
 class TestSearchTool:
     """测试 SearchTool 类"""
 
@@ -18,38 +47,60 @@ class TestSearchTool:
 
     def test_init_specific_backend_missing_key(self):
         """测试指定后端但缺少对应 Key 时抛出异常"""
-        with pytest.raises(ToolException) as exc_info:
-            SearchTool(backend="tavily", serpapi_key="fake_key")
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(serpapi_client=Mock())
+
+            with pytest.raises(ToolException) as exc_info:
+                SearchTool(backend="tavily", serpapi_key="fake_key")
 
         assert "配置错误" in str(exc_info.value)
         assert "tavily" in str(exc_info.value)
 
     def test_init_invalid_backend(self):
         """测试不支持的后端类型"""
-        with pytest.raises(ToolException) as exc_info:
-            SearchTool(backend="bing", tavily_api_key="fake")
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(tavily_client=Mock())
+
+            with pytest.raises(ToolException) as exc_info:
+                SearchTool(backend="bing", tavily_api_key="fake")
 
         assert "不支持的搜索后端" in str(exc_info.value)
 
     def test_init_success(self):
         """测试成功初始化"""
-        tool = SearchTool(backend="tavily", tavily_api_key="fake_key")
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(tavily_client=Mock())
+
+            tool = SearchTool(backend="tavily", tavily_api_key="fake_key")
+
         assert tool.backend == "tavily"
         assert "tavily" in tool.available_backends
 
+    def test_init_import_failure_marks_backend_unavailable(self):
+        """测试导入失败时将对应后端标记为不可用"""
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(
+                tavily_import_error=True,
+                serpapi_client=Mock(),
+            )
+
+            tool = SearchTool(backend="hybrid", tavily_api_key="fake", serpapi_key="fake")
+
+        assert "tavily" not in tool.available_backends
+        assert "serpapi" in tool.available_backends
+
     def test_run_empty_query(self):
         """测试空查询抛出异常"""
-        tool = SearchTool(backend="tavily", tavily_api_key="fake")
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(tavily_client=Mock())
+            tool = SearchTool(backend="tavily", tavily_api_key="fake")
 
         with pytest.raises(ToolException):
             tool.run({"query": ""})
 
-    @patch("momu_agent.tools.builtin.search.TavilyClient")
-    def test_search_tavily_success(self, mock_tavily_class):
+    def test_search_tavily_success(self):
         """测试 Tavily 搜索成功"""
         mock_client_instance = Mock()
-        mock_tavily_class.return_value = mock_client_instance
-
         mock_response = {
             "answer": "42",
             "results": [
@@ -62,19 +113,20 @@ class TestSearchTool:
         }
         mock_client_instance.search.return_value = mock_response
 
-        tool = SearchTool(backend="tavily", tavily_api_key="fake")
-        result = tool.run({"query": "meaning of life"})
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(
+                tavily_client=mock_client_instance
+            )
+            tool = SearchTool(backend="tavily", tavily_api_key="fake")
+            result = tool.run({"query": "meaning of life"})
 
         assert "42" in result
         assert "Life Answer" in result
         mock_client_instance.search.assert_called_once()
 
-    @patch("momu_agent.tools.builtin.search.GoogleSearchClient")
-    def test_search_serpapi_success(self, mock_serp_class):
+    def test_search_serpapi_success(self):
         """测试 SerpApi 搜索成功"""
         mock_client_instance = Mock()
-        mock_serp_class.return_value = mock_client_instance
-
         mock_results = {
             "answer_box": {"answer": "2 + 2 = 4"},
             "organic_results": [
@@ -83,60 +135,72 @@ class TestSearchTool:
         }
         mock_client_instance.search.return_value = mock_results
 
-        tool = SearchTool(backend="serpapi", serpapi_key="fake")
-        result = tool.run({"query": "calculate 2+2"})
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(
+                serpapi_client=mock_client_instance
+            )
+            tool = SearchTool(backend="serpapi", serpapi_key="fake")
+            result = tool.run({"query": "calculate 2+2"})
 
         assert "2 + 2 = 4" in result
         assert "Math" in result
         mock_client_instance.search.assert_called_once()
 
-    @patch("momu_agent.tools.builtin.search.TavilyClient")
-    def test_hybrid_prefers_tavily(self, mock_tavily_class):
+    def test_hybrid_prefers_tavily(self):
         """测试混合模式优先使用 Tavily"""
-        mock_client_instance = Mock()
-        mock_tavily_class.return_value = mock_client_instance
-        mock_client_instance.search.return_value = {
+        tavily_client_instance = Mock()
+        serpapi_client_instance = Mock()
+        tavily_client_instance.search.return_value = {
             "answer": "Tavily Result",
             "results": [],
         }
 
-        tool = SearchTool(backend="hybrid", tavily_api_key="fake", serpapi_key="fake")
-        result = tool.run({"query": "test"})
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(
+                tavily_client=tavily_client_instance,
+                serpapi_client=serpapi_client_instance,
+            )
+            tool = SearchTool(backend="hybrid", tavily_api_key="fake", serpapi_key="fake")
+            result = tool.run({"query": "test"})
 
         assert "Tavily Result" in result
-        mock_client_instance.search.assert_called_once()
+        tavily_client_instance.search.assert_called_once()
+        serpapi_client_instance.search.assert_not_called()
 
-    @patch("momu_agent.tools.builtin.search.GoogleSearchClient")
-    @patch("momu_agent.tools.builtin.search.TavilyClient")
-    def test_hybrid_fallback_to_serpapi(self, mock_tavily_class, mock_serp_class):
+    def test_hybrid_fallback_to_serpapi(self):
         """测试混合模式 Tavily 失败时回退到 SerpApi"""
-        mock_tavily_instance = Mock()
-        mock_tavily_class.return_value = mock_tavily_instance
-        mock_tavily_instance.search.side_effect = Exception("API Error")
+        tavily_client_instance = Mock()
+        tavily_client_instance.search.side_effect = Exception("API Error")
 
-        mock_serp_instance = Mock()
-        mock_serp_class.return_value = mock_serp_instance
-        mock_serp_instance.search.return_value = {
+        serpapi_client_instance = Mock()
+        serpapi_client_instance.search.return_value = {
             "organic_results": [
                 {"title": "Fallback", "snippet": "SerpApi Result", "link": "..."}
             ]
         }
 
-        tool = SearchTool(backend="hybrid", tavily_api_key="fake", serpapi_key="fake")
-        result = tool.run({"query": "test"})
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(
+                tavily_client=tavily_client_instance,
+                serpapi_client=serpapi_client_instance,
+            )
+            tool = SearchTool(backend="hybrid", tavily_api_key="fake", serpapi_key="fake")
+            result = tool.run({"query": "test"})
 
         assert "Fallback" in result
-        mock_tavily_instance.search.assert_called_once()
-        mock_serp_instance.search.assert_called_once()
+        tavily_client_instance.search.assert_called_once()
+        serpapi_client_instance.search.assert_called_once()
 
-    @patch("momu_agent.tools.builtin.search.GoogleSearchClient")
-    def test_hybrid_tavily_unavailable(self, mock_serp_class):
+    def test_hybrid_tavily_unavailable(self):
         """测试混合模式在没有 Tavily Key 时直接使用 SerpApi"""
-        mock_serp_instance = Mock()
-        mock_serp_class.return_value = mock_serp_instance
-        mock_serp_instance.search.return_value = {"organic_results": []}
+        serpapi_client_instance = Mock()
+        serpapi_client_instance.search.return_value = {"organic_results": []}
 
-        tool = SearchTool(backend="hybrid", serpapi_key="fake")
-        tool.run({"query": "test"})
+        with patch("momu_agent.tools.builtin.search.importlib.import_module") as mock_import:
+            mock_import.side_effect = _build_import_side_effect(
+                serpapi_client=serpapi_client_instance
+            )
+            tool = SearchTool(backend="hybrid", serpapi_key="fake")
+            tool.run({"query": "test"})
 
-        mock_serp_instance.search.assert_called_once()
+        serpapi_client_instance.search.assert_called_once()
