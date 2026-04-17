@@ -9,8 +9,8 @@ from .core.message import Message
 from .tools.builtin.calculator import CalculatorTool, calculate
 from .tools.builtin.search import SearchTool, search
 from .tools.chain import ToolChain, ToolChainManager
-from .tools.registry import ToolRegistry, global_registry
 from .tools.executor import ToolExecutor, run_batch_tool, run_parallel_tools
+from .tools.registry import ToolRegistry, global_registry
 
 __all__ = [
     "LLM",

@@ -4,8 +4,8 @@ from .base import Tool, ToolParameter
 from .builtin.calculator import CalculatorTool
 from .builtin.search import SearchTool
 from .chain import ChainStep, ToolChain, ToolChainManager
-from .registry import ToolRegistry, global_registry
 from .executor import ToolExecutor, run_batch_tool, run_parallel_tools
+from .registry import ToolRegistry, global_registry
 
 __all__ = [
     "Tool",
