@@ -56,6 +56,18 @@ class ReActAgent(Agent):
         tool_registry: ToolRegistry | None = None,
         max_steps: int = 5,
     ):
+        """
+        初始化 ReActAgent。
+
+        Args:
+            name: Agent 名称。
+            llm: 底层 LLM 实例。
+            system_prompt: 系统提示词模板；若为 None 则使用默认模板。
+            step_prompt: 每轮执行提示词模板；若为 None 则使用默认模板。
+            max_history_length: 最大对话历史长度。
+            tool_registry: 工具注册表；为 None 时仅进行推理，不执行工具调用。
+            max_steps: ReAct 最大迭代步数，超过后将终止并返回提示信息。
+        """
         self.system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
         super().__init__(name, llm, self.system_prompt, max_history_length)
         self.tool_registry = tool_registry
@@ -98,22 +110,35 @@ class ReActAgent(Agent):
         return "\n".join(observations)
 
     async def run(self, input_text: str, **kwargs) -> str:
+        """
+        运行 ReAct Agent 主循环（Thought → Action → Observation）。
+
+        Args:
+            input_text: 用户输入的问题。
+            **kwargs: 透传给 LLM.invoke 的额外参数（如 temperature、max_tokens）。
+
+        Returns:
+            当模型输出 Finish[...] 时返回最终答案；
+            若达到最大步数或执行中出现异常，返回对应错误/终止信息。
+        """
         self.logger.info(f"🤖 {self.name} 开始处理问题: {input_text}")
         self.add_message(Message(input_text, "user"))
 
+        # 记录 ReAct 的逐步历史（Thought / Action / Observation），
+        # 每一轮都会回填到下一轮提示中，帮助模型基于上下文持续推理。
         react_history: list[str] = []
 
         try:
             for step in range(1, self.max_steps + 1):
                 self.logger.info(f"🤖 --- 第 {step} 步 / 最大 {self.max_steps} 步 ---")
 
-                # 1. 构建消息并调用 LLM
+                # 1) 构建当前轮 messages 并调用 LLM 生成 Thought/Action。
                 messages = self._build_step_messages(input_text, react_history)
                 response_text = await self.llm.invoke(messages, **kwargs)
                 if not response_text:
                     raise AgentException("LLM未能返回有效响应。")
 
-                # 2. 解析 Thought / Action
+                # 2) 解析 Thought / Action；Action 是后续分支逻辑的核心依据。
                 thought, action = self._parse_output(response_text)
                 if thought:
                     self.logger.info(f"🤖 思考: {thought}")
@@ -121,7 +146,7 @@ class ReActAgent(Agent):
                 if not action:
                     raise AgentException("无法解析 Action。")
 
-                # 3. 检查是否完成
+                # 3) 若 Action 为 Finish[...]，说明任务已完成，直接返回最终答案。
                 if action.startswith("Finish"):
                     final_answer = self._parse_finish_action(action)
                     self.logger.info(f"🤖 最终答案: {final_answer}")
@@ -129,7 +154,7 @@ class ReActAgent(Agent):
                     self.add_message(Message(final_answer, "assistant"))
                     return final_answer
 
-                # 4. 解析工具调用
+                # 4) 解析工具调用；当动作不是 Finish 时，必须是合法工具调用协议。
                 tool_calls = self.parser.extract_tool_calls(action)
                 if not tool_calls:
                     raise AgentException(f"无效的工具调用格式: {action}")
@@ -138,7 +163,7 @@ class ReActAgent(Agent):
 
                 self.logger.info(f"🤖 检测到 {len(tool_calls)} 个工具调用，准备执行...")
 
-                # 5. 并发执行工具
+                # 5) 将工具调用转换为任务后并发执行，提升 I/O 密集场景效率。
                 tasks = [
                     self.parser.prepare_tool_task(
                         call["tool_name"], call["raw_params"], self.tool_registry
@@ -151,20 +176,21 @@ class ReActAgent(Agent):
                     timeout=30.0,
                 )
 
-                # 6. 聚合观察结果并更新历史
+                # 6) 汇总 Observation 并写入历史，作为下一轮推理输入。
                 observation = self._format_observations(results)
                 self.logger.info(f"🤖 观察结果:\n{observation}")
                 react_history.append(
                     f"Thought: {thought}\nAction: {action}\nObservation:\n{observation}"
                 )
 
-            # 达到最大步数
+            # 若循环结束仍未 Finish，说明在 max_steps 内未收敛到可交付结论。
             final_answer = f"🤖 已达到最大步数 ({self.max_steps})，Agent 未能得出结论。"
             self.logger.warning(final_answer)
             self.add_message(Message(final_answer, "assistant"))
             return final_answer
 
         except Exception as e:
+            # 统一异常出口：记录日志、写入会话消息并返回可读错误信息。
             error_msg = f"🤖 执行错误: {str(e)}"
             self.logger.error(error_msg)
             self.add_message(Message(error_msg, "assistant"))
