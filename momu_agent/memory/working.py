@@ -38,7 +38,7 @@ class WorkingMemory(BaseMemory):
         self.memories: list[MemoryItem] = []
         self.memory_heap: list[tuple[float, datetime, MemoryItem]] = []
 
-    def add(self, memory_item: MemoryItem) -> str:
+    async def add(self, memory_item: MemoryItem) -> str:
         """添加工作记忆。"""
         try:
             self._expire_old_memories()
@@ -50,7 +50,7 @@ class WorkingMemory(BaseMemory):
             self.memories.append(memory_item)
 
             self.current_tokens += len(memory_item.content.split())
-            self._enforce_capacity_limits()
+            await self._enforce_capacity_limits()
 
             return memory_item.id
         except MemoryException:
@@ -58,8 +58,7 @@ class WorkingMemory(BaseMemory):
         except Exception as e:
             raise MemoryException(f"添加工作记忆失败: {e}") from e
 
-
-    def retrieve(
+    async def retrieve(
         self, query: str, limit: int = 5, user_id: str | None = None, **_: Any
     ) -> list[MemoryItem]:
         """检索工作记忆。"""
@@ -138,7 +137,7 @@ class WorkingMemory(BaseMemory):
         except Exception as e:
             raise MemoryException(f"检索工作记忆失败: {e}") from e
 
-    def update(
+    async def update(
         self,
         memory_id: str,
         content: str | None = None,
@@ -164,12 +163,12 @@ class WorkingMemory(BaseMemory):
                 memory.metadata.update(metadata)
 
             self._update_heap_priority()
-            self._enforce_capacity_limits()
+            await self._enforce_capacity_limits()
             return True
 
         return False
 
-    def remove(self, memory_id: str) -> bool:
+    async def remove(self, memory_id: str) -> bool:
         """删除工作记忆。"""
         for index, memory in enumerate(self.memories):
             if memory.id != memory_id:
@@ -183,17 +182,17 @@ class WorkingMemory(BaseMemory):
 
         return False
 
-    def has_memory(self, memory_id: str) -> bool:
+    async def has_memory(self, memory_id: str) -> bool:
         """检查记忆是否存在。"""
         return any(memory.id == memory_id for memory in self.memories)
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """清空所有工作记忆。"""
         self.memories.clear()
         self.memory_heap.clear()
         self.current_tokens = 0
 
-    def get_stats(self) -> dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """获取工作记忆统计信息。"""
         self._expire_old_memories()
         active_memories = self.memories
@@ -227,7 +226,7 @@ class WorkingMemory(BaseMemory):
             "memory_type": "working",
         }
 
-    def get_recent(self, limit: int = 10) -> list[MemoryItem]:
+    async def get_recent(self, limit: int = 10) -> list[MemoryItem]:
         """获取最近的记忆。"""
         sorted_memories = sorted(
             self.memories,
@@ -236,7 +235,7 @@ class WorkingMemory(BaseMemory):
         )
         return sorted_memories[:limit]
 
-    def get_important(self, limit: int = 10) -> list[MemoryItem]:
+    async def get_important(self, limit: int = 10) -> list[MemoryItem]:
         """获取重要记忆。"""
         sorted_memories = sorted(
             self.memories,
@@ -245,11 +244,11 @@ class WorkingMemory(BaseMemory):
         )
         return sorted_memories[:limit]
 
-    def get_all(self) -> list[MemoryItem]:
+    async def get_all(self) -> list[MemoryItem]:
         """获取所有记忆。"""
         return self.memories.copy()
 
-    def get_context_summary(self, max_length: int = 500) -> str:
+    async def get_context_summary(self, max_length: int = 500) -> str:
         """获取上下文摘要。"""
         if not self.memories:
             return "No working memories available."
@@ -277,7 +276,7 @@ class WorkingMemory(BaseMemory):
 
         return "Working Memory Context:\n" + "\n".join(summary_parts)
 
-    def forget(
+    async def forget(
         self,
         strategy: str = "importance_based",
         threshold: float = 0.1,
@@ -312,7 +311,7 @@ class WorkingMemory(BaseMemory):
                 to_remove.append(memory.id)
 
         for memory_id in dict.fromkeys(to_remove):
-            if self.remove(memory_id):
+            if await self.remove(memory_id):
                 forgotten_count += 1
 
         return forgotten_count
@@ -331,13 +330,13 @@ class WorkingMemory(BaseMemory):
         decay_factor = self.config.decay_factor ** (hours_passed / 6)
         return max(0.1, decay_factor)
 
-    def _enforce_capacity_limits(self) -> None:
+    async def _enforce_capacity_limits(self) -> None:
         """强制执行容量限制。"""
         while len(self.memories) > self.max_capacity:
-            self._remove_lowest_priority_memory()
+            await self._remove_lowest_priority_memory()
 
         while self.current_tokens > self.max_tokens:
-            self._remove_lowest_priority_memory()
+            await self._remove_lowest_priority_memory()
 
     def _expire_old_memories(self) -> None:
         """按 TTL 清理过期记忆，并同步更新堆与 token 计数。"""
@@ -364,13 +363,13 @@ class WorkingMemory(BaseMemory):
             priority = self._calculate_priority(memory)
             heapq.heappush(self.memory_heap, (-priority, memory.timestamp, memory))
 
-    def _remove_lowest_priority_memory(self) -> None:
+    async def _remove_lowest_priority_memory(self) -> None:
         """删除优先级最低的记忆。"""
         if not self.memories:
             return
 
         lowest_memory = min(self.memories, key=self._calculate_priority)
-        self.remove(lowest_memory.id)
+        await self.remove(lowest_memory.id)
 
     def _update_heap_priority(self) -> None:
         """更新堆中记忆的优先级。"""

@@ -44,7 +44,8 @@ def working_memory(memory_config: MemoryConfig) -> WorkingMemory:
     return WorkingMemory(memory_config)
 
 
-def test_add_and_retrieve_uses_keyword_fallback(working_memory, monkeypatch):
+@pytest.mark.asyncio
+async def test_add_and_retrieve_uses_keyword_fallback(working_memory, monkeypatch):
     real_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):
@@ -80,20 +81,21 @@ def test_add_and_retrieve_uses_keyword_fallback(working_memory, monkeypatch):
         timestamp=older,
     )
 
-    working_memory.add(matching)
-    working_memory.add(forgotten)
-    working_memory.add(other_user)
+    await working_memory.add(matching)
+    await working_memory.add(forgotten)
+    await working_memory.add(other_user)
 
-    results = working_memory.retrieve("python", user_id="u1")
+    results = await working_memory.retrieve("python", user_id="u1")
 
     assert [memory.id for memory in results] == ["m1"]
 
 
-def test_update_changes_content_importance_metadata_and_tokens(working_memory):
+@pytest.mark.asyncio
+async def test_update_changes_content_importance_metadata_and_tokens(working_memory):
     memory = make_memory("m1", "alpha beta", importance=0.2)
-    working_memory.add(memory)
+    await working_memory.add(memory)
 
-    updated = working_memory.update(
+    updated = await working_memory.update(
         "m1",
         content="alpha beta gamma delta",
         importance=0.9,
@@ -107,26 +109,30 @@ def test_update_changes_content_importance_metadata_and_tokens(working_memory):
     assert working_memory.current_tokens == 4
 
 
-def test_remove_and_clear_update_internal_state(working_memory):
+@pytest.mark.asyncio
+async def test_remove_and_clear_update_internal_state(working_memory):
     first = make_memory("m1", "one two")
     second = make_memory("m2", "three four five")
-    working_memory.add(first)
-    working_memory.add(second)
+    await working_memory.add(first)
+    await working_memory.add(second)
 
-    removed = working_memory.remove("m1")
+    removed = await working_memory.remove("m1")
 
     assert removed is True
-    assert working_memory.has_memory("m1") is False
+    assert await working_memory.has_memory("m1") is False
     assert working_memory.current_tokens == 3
 
-    working_memory.clear()
+    await working_memory.clear()
 
-    assert working_memory.get_all() == []
+    assert await working_memory.get_all() == []
     assert working_memory.memory_heap == []
     assert working_memory.current_tokens == 0
 
 
-def test_capacity_limit_removes_lowest_priority_memory(memory_config: MemoryConfig):
+@pytest.mark.asyncio
+async def test_capacity_limit_removes_lowest_priority_memory(
+    memory_config: MemoryConfig,
+):
     memory_config.working_memory_capacity = 2
     working_memory = WorkingMemory(memory_config)
 
@@ -134,33 +140,37 @@ def test_capacity_limit_removes_lowest_priority_memory(memory_config: MemoryConf
     high_priority = make_memory("m2", "high value", importance=0.9)
     medium_priority = make_memory("m3", "medium value", importance=0.5)
 
-    working_memory.add(low_priority)
-    working_memory.add(high_priority)
-    working_memory.add(medium_priority)
+    await working_memory.add(low_priority)
+    await working_memory.add(high_priority)
+    await working_memory.add(medium_priority)
 
-    remaining_ids = {memory.id for memory in working_memory.get_all()}
+    remaining_ids = {memory.id for memory in await working_memory.get_all()}
 
     assert remaining_ids == {"m2", "m3"}
-    assert working_memory.has_memory("m1") is False
+    assert await working_memory.has_memory("m1") is False
 
 
-def test_token_limit_removes_lowest_priority_memory(memory_config: MemoryConfig):
+@pytest.mark.asyncio
+async def test_token_limit_removes_lowest_priority_memory(memory_config: MemoryConfig):
     memory_config.working_memory_tokens = 5
     working_memory = WorkingMemory(memory_config)
 
     high_priority = make_memory("m1", "one two", importance=1.0)
     low_priority = make_memory("m2", "three four five six", importance=0.1)
 
-    working_memory.add(high_priority)
-    working_memory.add(low_priority)
+    await working_memory.add(high_priority)
+    await working_memory.add(low_priority)
 
-    remaining_ids = [memory.id for memory in working_memory.get_all()]
+    remaining_ids = [memory.id for memory in await working_memory.get_all()]
 
     assert remaining_ids == ["m1"]
     assert working_memory.current_tokens == 2
 
 
-def test_expire_old_memories_removes_stale_entries_and_updates_tokens(memory_config):
+@pytest.mark.asyncio
+async def test_expire_old_memories_removes_stale_entries_and_updates_tokens(
+    memory_config,
+):
     memory_config.working_memory_ttl_minutes = 30
     working_memory = WorkingMemory(memory_config)
 
@@ -175,17 +185,18 @@ def test_expire_old_memories_removes_stale_entries_and_updates_tokens(memory_con
         timestamp=datetime.now() - timedelta(minutes=5),
     )
 
-    working_memory.add(expired)
-    working_memory.add(fresh)
+    await working_memory.add(expired)
+    await working_memory.add(fresh)
 
-    stats = working_memory.get_stats()
+    stats = await working_memory.get_stats()
 
     assert stats["count"] == 1
-    assert [memory.id for memory in working_memory.get_all()] == ["m2"]
+    assert [memory.id for memory in await working_memory.get_all()] == ["m2"]
     assert working_memory.current_tokens == 3
 
 
-def test_recent_important_and_context_summary_are_sorted(memory_config):
+@pytest.mark.asyncio
+async def test_recent_important_and_context_summary_are_sorted(memory_config):
     working_memory = WorkingMemory(memory_config)
     oldest = datetime.now() - timedelta(minutes=20)
     middle = datetime.now() - timedelta(minutes=10)
@@ -200,32 +211,36 @@ def test_recent_important_and_context_summary_are_sorted(memory_config):
         timestamp=newest,
     )
 
-    working_memory.add(low)
-    working_memory.add(high)
-    working_memory.add(latest)
+    await working_memory.add(low)
+    await working_memory.add(high)
+    await working_memory.add(latest)
 
-    assert [memory.id for memory in working_memory.get_recent(2)] == ["m3", "m1"]
-    assert [memory.id for memory in working_memory.get_important(2)] == ["m2", "m3"]
+    assert [memory.id for memory in await working_memory.get_recent(2)] == ["m3", "m1"]
+    assert [memory.id for memory in await working_memory.get_important(2)] == [
+        "m2",
+        "m3",
+    ]
 
-    full_summary = working_memory.get_context_summary(max_length=160)
+    full_summary = await working_memory.get_context_summary(max_length=160)
 
     assert full_summary.startswith("Working Memory Context:\n")
     assert "H" * 60 in full_summary
     assert "recent memory" in full_summary
 
-    truncated_summary = working_memory.get_context_summary(max_length=130)
+    truncated_summary = await working_memory.get_context_summary(max_length=130)
 
     assert "recent memory" in truncated_summary
     assert "..." in truncated_summary
 
 
-def test_forget_supports_importance_time_and_capacity_strategies(memory_config):
+@pytest.mark.asyncio
+async def test_forget_supports_importance_time_and_capacity_strategies(memory_config):
     memory_config.working_memory_capacity = 5
     memory_config.working_memory_ttl_minutes = 10_000
     working_memory = WorkingMemory(memory_config)
 
-    working_memory.add(make_memory("m1", "low importance", importance=0.05))
-    working_memory.add(
+    await working_memory.add(make_memory("m1", "low importance", importance=0.05))
+    await working_memory.add(
         make_memory(
             "m2",
             "old memory",
@@ -233,21 +248,21 @@ def test_forget_supports_importance_time_and_capacity_strategies(memory_config):
             timestamp=datetime.now() - timedelta(days=2),
         )
     )
-    working_memory.add(make_memory("m3", "high importance", importance=0.9))
+    await working_memory.add(make_memory("m3", "high importance", importance=0.9))
 
-    forgotten = working_memory.forget(strategy="importance_based", threshold=0.1)
+    forgotten = await working_memory.forget(strategy="importance_based", threshold=0.1)
     assert forgotten == 1
-    assert working_memory.has_memory("m1") is False
+    assert await working_memory.has_memory("m1") is False
 
-    forgotten = working_memory.forget(strategy="time_based", max_age_days=1)
+    forgotten = await working_memory.forget(strategy="time_based", max_age_days=1)
     assert forgotten == 1
-    assert working_memory.has_memory("m2") is False
+    assert await working_memory.has_memory("m2") is False
 
-    working_memory.add(make_memory("m4", "mid 1", importance=0.4))
-    working_memory.add(make_memory("m5", "mid 2", importance=0.3))
+    await working_memory.add(make_memory("m4", "mid 1", importance=0.4))
+    await working_memory.add(make_memory("m5", "mid 2", importance=0.3))
     working_memory.max_capacity = 2
 
-    forgotten = working_memory.forget(strategy="capacity_based")
+    forgotten = await working_memory.forget(strategy="capacity_based")
 
     assert forgotten == 1
-    assert {memory.id for memory in working_memory.get_all()} == {"m3", "m4"}
+    assert {memory.id for memory in await working_memory.get_all()} == {"m3", "m4"}

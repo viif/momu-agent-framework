@@ -61,15 +61,17 @@ class BaseMemory(ABC):
         self.memory_type = self.__class__.__name__.lower().replace("memory", "")
 
     @abstractmethod
-    def add(self, memory_item: MemoryItem) -> str:
+    async def add(self, memory_item: MemoryItem) -> str:
         """添加记忆项。"""
 
     @abstractmethod
-    def retrieve(self, query: str, limit: int = 5, **kwargs: Any) -> list[MemoryItem]:
+    async def retrieve(
+        self, query: str, limit: int = 5, **kwargs: Any
+    ) -> list[MemoryItem]:
         """检索相关记忆。"""
 
     @abstractmethod
-    def update(
+    async def update(
         self,
         memory_id: str,
         content: str | None = None,
@@ -79,19 +81,19 @@ class BaseMemory(ABC):
         """更新记忆。"""
 
     @abstractmethod
-    def remove(self, memory_id: str) -> bool:
+    async def remove(self, memory_id: str) -> bool:
         """删除记忆。"""
 
     @abstractmethod
-    def has_memory(self, memory_id: str) -> bool:
+    async def has_memory(self, memory_id: str) -> bool:
         """检查记忆是否存在。"""
 
     @abstractmethod
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """清空所有记忆。"""
 
     @abstractmethod
-    def get_stats(self) -> dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """获取记忆统计信息。"""
 
     def _generate_id(self) -> str:
@@ -114,8 +116,7 @@ class BaseMemory(ABC):
         return max(0.0, min(1.0, importance))
 
     def __str__(self) -> str:
-        stats = self.get_stats()
-        return f"{self.__class__.__name__}(count={stats.get('count', 0)})"
+        return f"{self.__class__.__name__}(type={self.memory_type})"
 
     def __repr__(self) -> str:
         return self.__str__()
