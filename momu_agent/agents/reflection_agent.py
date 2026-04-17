@@ -3,6 +3,7 @@
 from typing import Any
 
 from ..core.agent import Agent
+from ..core.exceptions import AgentException
 from ..core.llm import LLM
 from ..core.message import Message
 from ..tools.async_executor import run_parallel_tools
@@ -144,54 +145,60 @@ class ReflectionAgent(Agent):
             最终优化后的回答
         """
         self.logger.info(f"🤖 '{self.name}' 收到任务: {input_text}")
+        self.add_message(Message(input_text, "user"))
 
         # 每次运行重置记忆
         self.memory = Memory()
 
-        # ── 初始生成 ──────────────────────────────────────────────
-        self.logger.info("🤖 正在进行初始生成...")
-        initial_result = await self._call_llm(
-            self.prompts["initial"].format(task=input_text), **kwargs
-        )
-        self.memory.add_record("execution", initial_result)
-
-        # ── 反思迭代循环 ──────────────────────────────────────────
-        for i in range(1, self.max_iterations + 1):
-            self.logger.info(f"🤖 --- 第 {i}/{self.max_iterations} 轮反思 ---")
-
-            # 反思
-            last_result = self.memory.get_last_execution()
-            feedback = await self._call_llm(
-                self.prompts["reflect"].format(task=input_text, content=last_result),
-                **kwargs,
+        try:
+            # ── 初始生成 ──────────────────────────────────────────────
+            self.logger.info("🤖 正在进行初始生成...")
+            initial_result = await self._call_llm(
+                self.prompts["initial"].format(task=input_text), **kwargs
             )
-            self.memory.add_record("reflection", feedback)
-            self.logger.debug(f"🤖 反思反馈: {feedback!r}")
+            self.memory.add_record("execution", initial_result)
 
-            # 提前退出判断
-            if any(sig in feedback.lower() for sig in _NO_IMPROVEMENT_SIGNALS):
-                self.logger.info("🤖 反思认为回答已无需改进，提前结束迭代")
-                break
+            # ── 反思迭代循环 ──────────────────────────────────────────
+            for i in range(1, self.max_iterations + 1):
+                self.logger.info(f"🤖 --- 第 {i}/{self.max_iterations} 轮反思 ---")
 
-            # 优化
-            self.logger.info(f"🤖 根据反馈优化回答（第 {i} 轮）...")
-            refined = await self._call_llm(
-                self.prompts["refine"].format(
-                    task=input_text,
-                    last_attempt=last_result,
-                    feedback=feedback,
-                ),
-                **kwargs,
-            )
-            self.memory.add_record("execution", refined)
+                # 反思
+                last_result = self.memory.get_last_execution()
+                feedback = await self._call_llm(
+                    self.prompts["reflect"].format(task=input_text, content=last_result),
+                    **kwargs,
+                )
+                self.memory.add_record("reflection", feedback)
+                self.logger.debug(f"🤖 反思反馈: {feedback!r}")
 
-        # ── 收尾 ──────────────────────────────────────────────────
-        final_answer = self.memory.get_last_execution()
-        self.logger.info(f"🤖 任务完成，最终答案: {final_answer!r}")
+                # 提前退出判断
+                if any(sig in feedback.lower() for sig in _NO_IMPROVEMENT_SIGNALS):
+                    self.logger.info("🤖 反思认为回答已无需改进，提前结束迭代")
+                    break
 
-        self.add_message(Message(input_text, "user"))
-        self.add_message(Message(final_answer, "assistant"))
-        return final_answer
+                # 优化
+                self.logger.info(f"🤖 根据反馈优化回答（第 {i} 轮）...")
+                refined = await self._call_llm(
+                    self.prompts["refine"].format(
+                        task=input_text,
+                        last_attempt=last_result,
+                        feedback=feedback,
+                    ),
+                    **kwargs,
+                )
+                self.memory.add_record("execution", refined)
+
+            # ── 收尾 ──────────────────────────────────────────────────
+            final_answer = self.memory.get_last_execution()
+            self.logger.info(f"🤖 任务完成，最终答案: {final_answer!r}")
+            self.add_message(Message(final_answer, "assistant"))
+            return final_answer
+        except Exception as e:
+            error_msg = f"🤖 执行错误: {str(e)}"
+            self.logger.error(error_msg)
+            self.add_message(Message(error_msg, "assistant"))
+            return error_msg
+
 
     def _build_tool_system_prompt(self) -> str:
         """构建包含工具信息的系统提示词"""
@@ -219,7 +226,9 @@ class ReflectionAgent(Agent):
         """执行带工具调用循环的 LLM 调用"""
         assert self.tool_registry is not None  # 调用方已确保非 None
         for _ in range(self.max_tool_iterations):
-            result = await self.llm.invoke(messages, **kwargs) or ""
+            result = await self.llm.invoke(messages, **kwargs)
+            if not result:
+                raise AgentException("LLM 未返回有效响应。")
             tool_calls = self.parser.extract_tool_calls(result)
 
             if not tool_calls:
@@ -250,13 +259,16 @@ class ReflectionAgent(Agent):
         self.logger.warning(
             f"🤖 已达到最大工具调用次数 ({self.max_tool_iterations})，强制终止。"
         )
-        return f"⚠️ 已达到最大工具调用次数限制 ({self.max_tool_iterations})"
+        raise AgentException(f"已达到最大工具调用次数限制 ({self.max_tool_iterations})")
 
     async def _call_llm(self, prompt: str, **kwargs) -> str:
         """用单条用户消息调用 LLM（有工具注册表则运行工具调用循环）"""
         if not self.tool_registry:
             messages = [{"role": "user", "content": prompt}]
-            return await self.llm.invoke(messages, **kwargs) or ""
+            response = await self.llm.invoke(messages, **kwargs)
+            if not response:
+                raise AgentException("LLM 未返回有效响应。")
+            return response
 
         messages = [
             {"role": "system", "content": self._build_tool_system_prompt()},

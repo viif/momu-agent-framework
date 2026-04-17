@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from momu_agent.agents.reflection_agent import Memory, ReflectionAgent
+from momu_agent.core.exceptions import AgentException
 from momu_agent.tools.base import ToolParameter
 from momu_agent.tools.registry import ToolRegistry
 
@@ -146,7 +147,68 @@ async def test_memory_reset_between_runs(mock_llm):
     assert second_records == 2
 
 
-# ── 自定义提示词 ──────────────────────────────────────────────────────────────
+async def test_call_llm_raises_agent_exception_on_empty_response(mock_llm):
+    """
+    测试：直接调用 _call_llm()，无工具模式下 LLM 空响应时抛出 AgentException
+    """
+    agent = ReflectionAgent(name="CallFailAgent", llm=mock_llm, max_iterations=1)
+    mock_llm.invoke.return_value = ""
+
+    with pytest.raises(AgentException, match="LLM 未返回有效响应"):
+        await agent._call_llm("空响应测试")
+
+
+@patch("momu_agent.agents.reflection_agent.run_parallel_tools")
+async def test_invoke_with_tools_raises_on_max_iterations(
+    mock_run_parallel, mock_llm, mock_registry
+):
+    """
+    测试：直接调用 _invoke_with_tools()，连续工具调用超限时抛出 AgentException
+    """
+    agent = ReflectionAgent(
+        name="InvokeToolLimitAgent",
+        llm=mock_llm,
+        tool_registry=mock_registry,
+        max_iterations=1,
+        max_tool_iterations=2,
+    )
+
+    mock_run_parallel.return_value = [
+        {
+            "task_id": 0,
+            "tool_name": "calculator",
+            "input_data": {},
+            "result": "42",
+            "status": "success",
+        }
+    ]
+    mock_llm.invoke.side_effect = [
+        '[TOOL_CALL:calculator:{"expression": "1+1"}]',
+        '[TOOL_CALL:calculator:{"expression": "2+2"}]',
+    ]
+    messages = [
+        {"role": "system", "content": "工具模式测试"},
+        {"role": "user", "content": "请计算"},
+    ]
+
+    with pytest.raises(AgentException, match="已达到最大工具调用次数限制"):
+        await agent._invoke_with_tools(messages)
+
+
+async def test_run_returns_error_when_initial_generation_empty(mock_llm):
+    """
+    测试：run() 中初始生成为空时，统一包装为执行错误消息并写入历史
+    """
+    agent = ReflectionAgent(name="RunInitialEmptyAgent", llm=mock_llm)
+    mock_llm.invoke.return_value = ""
+
+    result = await agent.run("初始空响应测试")
+
+    assert "执行错误" in result
+    assert "LLM 未返回有效响应" in result
+    assert len(agent._history) == 2
+    assert agent._history[0].role == "user"
+    assert agent._history[1].role == "assistant"
 
 
 async def test_custom_prompts_used(mock_llm):

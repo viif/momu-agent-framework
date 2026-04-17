@@ -4,6 +4,7 @@ import ast
 from typing import Any
 
 from ..core.agent import Agent
+from ..core.exceptions import AgentException
 from ..core.llm import LLM
 from ..core.message import Message
 from ..tools.async_executor import run_parallel_tools
@@ -62,26 +63,36 @@ class Planner:
             **kwargs: 传递给 LLM 的额外参数
 
         Returns:
-            步骤字符串列表；解析失败时返回空列表
+            步骤字符串列表
+
+        Raises:
+            AgentException: LLM 响应为空或计划解析失败
         """
         prompt = self.prompt_template.format(question=question)
         messages = [{"role": "user", "content": prompt}]
 
         self.logger.info("🤖 正在生成计划...")
-        response_text = await self.llm.invoke(messages, **kwargs) or ""
+        response_text = await self.llm.invoke(messages, **kwargs)
+        if not response_text:
+            raise AgentException("规划阶段 LLM 未返回有效响应。")
         self.logger.debug(f"🤖 规划器原始响应:\n{response_text}")
 
         try:
             plan_str = response_text.split("```python")[1].split("```")[0].strip()
             plan = ast.literal_eval(plan_str)
-            if isinstance(plan, list):
-                self.logger.info(f"🤖 计划生成成功，共 {len(plan)} 个步骤")
-                return plan
-            self.logger.warning("🤖 解析结果不是列表，返回空计划")
-            return []
         except (ValueError, SyntaxError, IndexError) as e:
             self.logger.warning(f"🤖 解析计划失败: {e}，原始响应: {response_text!r}")
-            return []
+            raise AgentException("无法生成有效的行动计划，任务终止。") from e
+
+        if not isinstance(plan, list):
+            raise AgentException("无法生成有效的行动计划，任务终止。")
+        if not plan:
+            raise AgentException("无法生成有效的行动计划，任务终止。")
+        if not all(isinstance(step, str) and step.strip() for step in plan):
+            raise AgentException("无法生成有效的行动计划，任务终止。")
+
+        self.logger.info(f"🤖 计划生成成功，共 {len(plan)} 个步骤")
+        return plan
 
 
 class Executor:
@@ -128,10 +139,15 @@ class Executor:
     ) -> str:
         """在单步执行中支持工具调用循环"""
         if not self.tool_registry:
-            return await self.llm.invoke(messages, **kwargs) or ""
+            result = await self.llm.invoke(messages, **kwargs)
+            if not result:
+                raise AgentException("执行阶段 LLM 未返回有效响应。")
+            return result
 
         for _ in range(self.max_tool_iterations):
-            result = await self.llm.invoke(messages, **kwargs) or ""
+            result = await self.llm.invoke(messages, **kwargs)
+            if not result:
+                raise AgentException("执行阶段 LLM 未返回有效响应。")
             tool_calls = self.parser.extract_tool_calls(result)
 
             if not tool_calls:
@@ -162,7 +178,7 @@ class Executor:
         self.logger.warning(
             f"🤖 步骤已达到最大工具调用次数 ({self.max_tool_iterations})，强制终止。"
         )
-        return f"⚠️ 已达到最大工具调用次数限制 ({self.max_tool_iterations})"
+        raise AgentException(f"已达到最大工具调用次数限制 ({self.max_tool_iterations})")
 
     async def execute(self, question: str, plan: list[str], **kwargs) -> str:
         """
@@ -198,7 +214,9 @@ class Executor:
                 result = await self._execute_step_with_tools(messages, **kwargs)
             else:
                 messages = [{"role": "user", "content": prompt}]
-                result = await self.llm.invoke(messages, **kwargs) or ""
+                result = await self.llm.invoke(messages, **kwargs)
+                if not result:
+                    raise AgentException("执行阶段 LLM 未返回有效响应。")
 
             history += f"步骤 {i}: {step}\n结果: {result}\n\n"
             final_answer = result
@@ -270,20 +288,19 @@ class PlanSolveAgent(Agent):
             最终答案
         """
         self.logger.info(f"🤖 '{self.name}' 收到问题: {input_text}")
+        self.add_message(Message(input_text, "user"))
 
-        # 规划阶段
-        plan = await self.planner.plan(input_text, **kwargs)
-        if not plan:
-            error_msg = "无法生成有效的行动计划，任务终止。"
-            self.logger.warning(f"🤖 {error_msg}")
-            self.add_message(Message(input_text, "user"))
+        try:
+            # 规划阶段
+            plan = await self.planner.plan(input_text, **kwargs)
+
+            # 执行阶段
+            final_answer = await self.executor.execute(input_text, plan, **kwargs)
+            self.logger.info(f"🤖 任务完成，最终答案: {final_answer!r}")
+            self.add_message(Message(final_answer, "assistant"))
+            return final_answer
+        except Exception as e:
+            error_msg = f"🤖 执行错误: {str(e)}"
+            self.logger.error(error_msg)
             self.add_message(Message(error_msg, "assistant"))
             return error_msg
-
-        # 执行阶段
-        final_answer = await self.executor.execute(input_text, plan, **kwargs)
-        self.logger.info(f"🤖 任务完成，最终答案: {final_answer!r}")
-
-        self.add_message(Message(input_text, "user"))
-        self.add_message(Message(final_answer, "assistant"))
-        return final_answer

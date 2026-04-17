@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from momu_agent.agents.plan_solve_agent import PlanSolveAgent
+from momu_agent.core.exceptions import AgentException
 from momu_agent.tools.base import ToolParameter
 from momu_agent.tools.registry import ToolRegistry
 
@@ -111,6 +112,44 @@ async def test_empty_plan_stores_history(mock_llm):
     assert agent._history[0].role == "user"
     assert agent._history[1].role == "assistant"
     assert "无法生成有效的行动计划" in agent._history[1].content
+
+
+async def test_planner_raises_agent_exception_on_invalid_plan(mock_llm):
+    """
+    测试：直接调用 planner.plan()，当规划结果无法解析时抛出 AgentException
+    """
+    agent = PlanSolveAgent(name="PlannerFailAgent", llm=mock_llm)
+    mock_llm.invoke.return_value = "不是合法计划"
+
+    with pytest.raises(AgentException, match="无法生成有效的行动计划"):
+        await agent.planner.plan("规划异常测试")
+
+
+async def test_executor_raises_agent_exception_on_empty_response(mock_llm):
+    """
+    测试：直接调用 executor.execute()，当执行阶段 LLM 返回空响应时抛出 AgentException
+    """
+    agent = PlanSolveAgent(name="ExecutorFailAgent", llm=mock_llm)
+    mock_llm.invoke.return_value = ""
+
+    with pytest.raises(AgentException, match="执行阶段 LLM 未返回有效响应"):
+        await agent.executor.execute("执行异常测试", ["步骤1"])
+
+
+async def test_run_returns_error_when_planner_llm_empty(mock_llm):
+    """
+    测试：run() 中规划阶段 LLM 空响应时，统一包装为执行错误消息并写入历史
+    """
+    agent = PlanSolveAgent(name="RunPlannerEmptyAgent", llm=mock_llm)
+    mock_llm.invoke.return_value = ""
+
+    result = await agent.run("空响应测试")
+
+    assert "执行错误" in result
+    assert "规划阶段 LLM 未返回有效响应" in result
+    assert len(agent._history) == 2
+    assert agent._history[0].role == "user"
+    assert agent._history[1].role == "assistant"
 
 
 # ---------- 自定义提示词 ----------
