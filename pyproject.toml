@@ -17,6 +17,7 @@ search = [
     "tavily-python>=0.7.23",
 ]
 memory = [
+    "aiosqlite>=0.22.1",
     "scikit-learn>=1.8.0",
 ]
 
