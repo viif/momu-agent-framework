@@ -2,6 +2,7 @@ import pytest
 
 from momu_agent.core.exceptions import ToolException
 from momu_agent.tools import CalculatorTool
+from momu_agent.tools.builtin.calculator import calculate
 
 
 class TestCalculatorTool:
@@ -77,6 +78,17 @@ class TestCalculatorTool:
         """测试 'expression' 参数作为 'input' 的别名"""
         result = await calculator.run({"expression": "10 + 10"})
         assert result == "20"
+
+    @pytest.mark.asyncio
+    async def test_calculate_helper(self):
+        """测试 calculate 便捷函数"""
+        assert await calculate("2 + 3 * 4") == "14"
+
+    @pytest.mark.asyncio
+    async def test_calculate_helper_empty_input(self):
+        """测试 calculate 便捷函数空输入"""
+        with pytest.raises(ToolException):
+            await calculate("")
 
     def test_get_parameters(self, calculator):
         """测试获取参数定义"""
