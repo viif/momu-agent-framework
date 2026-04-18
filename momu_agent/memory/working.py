@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from ..core.exceptions import MemoryException
+from ..utils.logger import get_logger
 from .base import Memory, MemoryConfig, MemoryItem
 
 
@@ -38,6 +39,12 @@ class WorkingMemory(Memory):
         self.memories: list[MemoryItem] = []
         self.memory_heap: list[tuple[float, datetime, MemoryItem]] = []
 
+        self.logger = get_logger(__name__)
+        self.logger.debug(
+            f"🧠 WorkingMemory 初始化完成 (容量: {self.max_capacity}, "
+            f"最大 token: {self.max_tokens}, TTL: {self.max_age_minutes} 分钟)"
+        )
+
     async def add(self, memory_item: MemoryItem) -> str:
         """添加工作记忆。"""
         try:
@@ -52,10 +59,15 @@ class WorkingMemory(Memory):
             self.current_tokens += len(memory_item.content.split())
             await self._enforce_capacity_limits()
 
+            self.logger.debug(
+                f"🧠 添加工作记忆 [{memory_item.id}]，当前数量: {len(self.memories)}，"
+                f"token: {self.current_tokens}/{self.max_tokens}"
+            )
             return memory_item.id
         except MemoryException:
             raise
         except Exception as e:
+            self.logger.error(f"🧠 添加工作记忆失败: {e}")
             raise MemoryException(f"添加工作记忆失败: {e}") from e
 
     async def retrieve(
@@ -131,10 +143,15 @@ class WorkingMemory(Memory):
                     scored_memories.append((final_score, memory))
 
             scored_memories.sort(key=lambda item: item[0], reverse=True)
-            return [memory for _, memory in scored_memories[:limit]]
+            results = [memory for _, memory in scored_memories[:limit]]
+            self.logger.debug(
+                f"🧠 检索工作记忆，命中 {len(results)} 条（查询: {query!r}）"
+            )
+            return results
         except MemoryException:
             raise
         except Exception as e:
+            self.logger.error(f"🧠 检索工作记忆失败: {e}")
             raise MemoryException(f"检索工作记忆失败: {e}") from e
 
     async def update(
@@ -164,8 +181,10 @@ class WorkingMemory(Memory):
 
             self._update_heap_priority()
             await self._enforce_capacity_limits()
+            self.logger.debug(f"🧠 更新工作记忆 [{memory_id}] 成功")
             return True
 
+        self.logger.warning(f"🧠 更新工作记忆失败，未找到 [{memory_id}]")
         return False
 
     async def remove(self, memory_id: str) -> bool:
@@ -178,6 +197,9 @@ class WorkingMemory(Memory):
             self.current_tokens -= len(removed_memory.content.split())
             self.current_tokens = max(0, self.current_tokens)
             self._update_heap_priority()
+            self.logger.debug(
+                f"🧠 删除工作记忆 [{memory_id}]，剩余: {len(self.memories)} 条"
+            )
             return True
 
         return False
@@ -188,9 +210,11 @@ class WorkingMemory(Memory):
 
     async def clear(self) -> None:
         """清空所有工作记忆。"""
+        count = len(self.memories)
         self.memories.clear()
         self.memory_heap.clear()
         self.current_tokens = 0
+        self.logger.info(f"🧠 清空工作记忆，共移除 {count} 条")
 
     async def get_stats(self) -> dict[str, Any]:
         """获取工作记忆统计信息。"""
@@ -314,6 +338,10 @@ class WorkingMemory(Memory):
             if await self.remove(memory_id):
                 forgotten_count += 1
 
+        if forgotten_count:
+            self.logger.info(
+                f"🧠 遗忘机制（{strategy}）移除了 {forgotten_count} 条记忆"
+            )
         return forgotten_count
 
     def _calculate_priority(self, memory: MemoryItem) -> float:
@@ -333,9 +361,15 @@ class WorkingMemory(Memory):
     async def _enforce_capacity_limits(self) -> None:
         """强制执行容量限制。"""
         while len(self.memories) > self.max_capacity:
+            self.logger.warning(
+                f"🧠 工作记忆超出容量限制 ({len(self.memories)}/{self.max_capacity})，移除最低优先级记忆"
+            )
             await self._remove_lowest_priority_memory()
 
         while self.current_tokens > self.max_tokens:
+            self.logger.warning(
+                f"🧠 工作记忆超出 token 限制 ({self.current_tokens}/{self.max_tokens})，移除最低优先级记忆"
+            )
             await self._remove_lowest_priority_memory()
 
     def _expire_old_memories(self) -> None:
@@ -356,6 +390,10 @@ class WorkingMemory(Memory):
         if len(kept) == len(self.memories):
             return
 
+        expired_count = len(self.memories) - len(kept)
+        self.logger.debug(
+            f"🧠 TTL 清理过期记忆 {expired_count} 条（TTL: {self.max_age_minutes} 分钟）"
+        )
         self.memories = kept
         self.current_tokens = max(0, self.current_tokens - removed_token_sum)
         self.memory_heap = []

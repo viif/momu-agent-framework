@@ -15,6 +15,7 @@ from uuid import uuid4
 import aiosqlite
 
 from ...core.exceptions import MemoryException
+from ...utils.logger import get_logger
 
 
 class DocumentStore(ABC):
@@ -103,6 +104,11 @@ class SQLiteDocumentStore(DocumentStore):
         os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
         self._initialized = True
 
+        self.logger = get_logger(__name__)
+        self.logger.debug(
+            f"🧠 SQLiteDocumentStore 初始化完成 (db_path: {self.db_path})"
+        )
+
     async def _ensure_db(self) -> None:
         if self._db_ready:
             return
@@ -143,6 +149,7 @@ class SQLiteDocumentStore(DocumentStore):
             await db.commit()
             self._conn = db
             self._db_ready = True
+            self.logger.info(f"🧠 SQLite 数据库初始化完成: {self.db_path}")
 
     async def add_memory(
         self,
@@ -181,10 +188,15 @@ class SQLiteDocumentStore(DocumentStore):
                     ),
                 )
                 await self._conn.commit()
+            self.logger.debug(
+                f"🧠 写入记忆 [{memory_id}] (user: '{user_id}', type: '{memory_type}', "
+                f"importance: {importance})"
+            )
             return memory_id
         except MemoryException:
             raise
         except Exception as e:
+            self.logger.error(f"🧠 add_memory 失败: {e}")
             raise MemoryException(f"add_memory failed: {e}") from e
 
     async def get_memory(self, memory_id: str) -> dict[str, Any] | None:
@@ -203,6 +215,7 @@ class SQLiteDocumentStore(DocumentStore):
             ) as cursor:
                 row = await cursor.fetchone()
             if not row:
+                self.logger.debug(f"🧠 未找到记忆 [{memory_id}]")
                 return None
             return {
                 "memory_id": row["id"],
@@ -264,7 +277,7 @@ class SQLiteDocumentStore(DocumentStore):
                 params + [limit],
             ) as cursor:
                 rows = await cursor.fetchall()
-            return [
+            results = [
                 {
                     "memory_id": row["id"],
                     "user_id": row["user_id"],
@@ -279,9 +292,15 @@ class SQLiteDocumentStore(DocumentStore):
                 }
                 for row in rows
             ]
+            self.logger.debug(
+                f"🧠 搜索记忆，命中 {len(results)} 条 "
+                f"(user: {user_id!r}, type: {memory_type!r}, limit: {limit})"
+            )
+            return results
         except MemoryException:
             raise
         except Exception as e:
+            self.logger.error(f"🧠 search_memories 失败: {e}")
             raise MemoryException(f"search_memories failed: {e}") from e
 
     async def update_memory(
@@ -316,10 +335,16 @@ class SQLiteDocumentStore(DocumentStore):
                     params,
                 )
                 await self._conn.commit()
-                return cursor.rowcount > 0
+                hit = cursor.rowcount > 0
+            if hit:
+                self.logger.debug(f"🧠 更新记忆 [{memory_id}] 成功")
+            else:
+                self.logger.warning(f"🧠 更新记忆失败，未找到 [{memory_id}]")
+            return hit
         except MemoryException:
             raise
         except Exception as e:
+            self.logger.error(f"🧠 update_memory 失败: {e}")
             raise MemoryException(f"update_memory failed: {e}") from e
 
     async def delete_memory(self, memory_id: str) -> bool:
@@ -332,10 +357,16 @@ class SQLiteDocumentStore(DocumentStore):
                     "DELETE FROM memories WHERE id = ?", (memory_id,)
                 )
                 await self._conn.commit()
-                return cursor.rowcount > 0
+                hit = cursor.rowcount > 0
+            if hit:
+                self.logger.debug(f"🧠 删除记忆 [{memory_id}] 成功")
+            else:
+                self.logger.warning(f"🧠 删除记忆失败，未找到 [{memory_id}]")
+            return hit
         except MemoryException:
             raise
         except Exception as e:
+            self.logger.error(f"🧠 delete_memory 失败: {e}")
             raise MemoryException(f"delete_memory failed: {e}") from e
 
     async def get_database_stats(self) -> dict[str, Any]:
@@ -412,3 +443,4 @@ class SQLiteDocumentStore(DocumentStore):
             await self._conn.close()
             self._conn = None
             self._db_ready = False
+            self.logger.info(f"🧠 SQLite 连接已关闭: {self.db_path}")
