@@ -1,5 +1,6 @@
 """搜索工具"""
 
+import asyncio
 import importlib
 from typing import Any
 
@@ -48,7 +49,7 @@ class SearchTool(Tool):
         if self.tavily_api_key:
             try:
                 tavily_module = importlib.import_module("tavily")
-                tavily_client_cls = getattr(tavily_module, "TavilyClient")
+                tavily_client_cls = getattr(tavily_module, "AsyncTavilyClient")
                 self.tavily_client = tavily_client_cls(api_key=self.tavily_api_key)
                 self.available_backends.append("tavily")
                 has_valid_backend = True
@@ -119,43 +120,57 @@ class SearchTool(Tool):
 
         try:
             if self.backend == "hybrid":
-                return self._search_hybrid(query)
+                return await self._search_hybrid(query)
             elif self.backend == "tavily":
-                return self._search_tavily(query)
+                return await self._search_tavily(query)
             elif self.backend == "serpapi":
-                return self._search_serpapi(query)
+                return await self._search_serpapi(query)
             else:
                 raise ToolException(f"未知的后端类型: {self.backend}")
         except Exception as e:
             raise ToolException(f"搜索执行时发生错误: {str(e)}")
 
-    def _search_hybrid(self, query: str) -> str:
+    async def _search_hybrid(self, query: str) -> str:
         """混合搜索 - 智能选择最佳搜索源"""
-        # 优先使用Tavily（AI优化的搜索）
-        if "tavily" in self.available_backends:
-            try:
-                self.logger.info("🔧 使用Tavily进行AI优化搜索")
-                return self._search_tavily(query)
-            except Exception as e:
-                self.logger.warning(f"🔧 Tavily搜索失败: {e}")
-                # 如果Tavily失败，尝试SerpApi
-                if "serpapi" in self.available_backends:
-                    self.logger.info("🔧 切换到SerpApi搜索")
-                    return self._search_serpapi(query)
+        if {
+            "tavily",
+            "serpapi",
+        }.issubset(self.available_backends):
+            self.logger.info("🔧 并行使用Tavily与SerpApi搜索")
+            tavily_result, serpapi_result = await asyncio.gather(
+                self._search_tavily(query),
+                self._search_serpapi(query),
+                return_exceptions=True,
+            )
 
-        # 如果Tavily不可用，使用SerpApi
-        elif "serpapi" in self.available_backends:
+            if isinstance(tavily_result, BaseException):
+                self.logger.warning(f"🔧 Tavily搜索失败: {tavily_result}")
+            else:
+                return tavily_result
+
+            if isinstance(serpapi_result, BaseException):
+                self.logger.warning(f"🔧 SerpApi搜索失败: {serpapi_result}")
+            else:
+                return serpapi_result
+
+            raise ToolException("Tavily 和 SerpApi 均搜索失败")
+
+        if "tavily" in self.available_backends:
+            self.logger.info("🔧 使用Tavily进行AI优化搜索")
+            return await self._search_tavily(query)
+
+        if "serpapi" in self.available_backends:
             self.logger.info("🔧 使用SerpApi进行Google搜索")
-            return self._search_serpapi(query)
+            return await self._search_serpapi(query)
 
         raise ToolException("内部错误：混合搜索模式下没有可用的后端")
 
-    def _search_tavily(self, query: str) -> str:
+    async def _search_tavily(self, query: str) -> str:
         """使用Tavily搜索"""
         if not self.tavily_client:
             raise ToolException("Tavily 客户端未初始化")
 
-        response = self.tavily_client.search(
+        response = await self.tavily_client.search(
             query=query, search_depth="basic", include_answer=True, max_results=3
         )
 
@@ -168,17 +183,55 @@ class SearchTool(Tool):
 
         return result
 
-    def _search_serpapi(self, query: str) -> str:
+    async def _search_serpapi(self, query: str) -> str:
         """使用SerpApi搜索"""
         if not self.serpapi_client:
             raise ToolException("SerpApi 客户端未初始化")
 
         try:
-            results = self.serpapi_client.search(
-                q=query, engine="google", gl="cn", hl="zh-cn"
+            async_submit_result = await asyncio.to_thread(
+                self.serpapi_client.search,
+                q=query,
+                engine="google",
+                gl="cn",
+                hl="zh-cn",
+                **{"async": True},
             )
         except Exception as e:
             raise ToolException(f"SerpApi 请求失败: {str(e)}")
+
+        async_submit_data = (
+            async_submit_result.as_dict()
+            if hasattr(async_submit_result, "as_dict")
+            else async_submit_result
+        )
+        metadata = async_submit_data.get("search_metadata", {})
+        search_id = metadata.get("id")
+        if not search_id:
+            raise ToolException("SerpApi 异步请求未返回 search_id")
+
+        results: dict[str, Any] | None = None
+        for _ in range(30):
+            try:
+                archive_result = await asyncio.to_thread(
+                    self.serpapi_client.search_archive,
+                    search_id=search_id,
+                )
+            except Exception as e:
+                raise ToolException(f"SerpApi 归档结果获取失败: {str(e)}")
+
+            status = archive_result.get("search_metadata", {}).get("status", "")
+            if status == "Success":
+                results = archive_result
+                break
+            if status == "Error":
+                error_msg = archive_result.get("error", "未知错误")
+                raise ToolException(f"SerpApi 异步搜索失败: {error_msg}")
+
+            await asyncio.sleep(0.5)
+
+        if results is None:
+            raise ToolException("SerpApi 异步搜索超时，未获得完成结果")
 
         result_text = "🔍 SerpApi Google搜索结果：\n\n"
 

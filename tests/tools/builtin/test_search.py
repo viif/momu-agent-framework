@@ -26,7 +26,7 @@ def _build_import_side_effect(
             if tavily_import_error:
                 raise ImportError("No module named 'tavily'")
             module = Mock()
-            module.TavilyClient = Mock(return_value=tavily_client)
+            module.AsyncTavilyClient = Mock(return_value=tavily_client)
             return module
 
         if name == "serpapi":
@@ -131,7 +131,7 @@ class TestSearchTool:
                 }
             ],
         }
-        mock_client_instance.search.return_value = mock_response
+        mock_client_instance.search = AsyncMock(return_value=mock_response)
 
         with patch(
             "momu_agent.tools.builtin.search.importlib.import_module"
@@ -144,7 +144,7 @@ class TestSearchTool:
 
         assert "42" in result
         assert "Life Answer" in result
-        mock_client_instance.search.assert_called_once()
+        mock_client_instance.search.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_search_serpapi_success(self):
@@ -156,92 +156,151 @@ class TestSearchTool:
                 {"title": "Math", "snippet": "Basic math", "link": "http://math.com"}
             ],
         }
-        mock_client_instance.search.return_value = mock_results
+        mock_async_submit = Mock()
+        mock_async_submit.as_dict.return_value = {
+            "search_metadata": {"id": "sid-1", "status": "Processing"}
+        }
+        mock_archive_result = {
+            "search_metadata": {"status": "Success"},
+            **mock_results,
+        }
 
-        with patch(
-            "momu_agent.tools.builtin.search.importlib.import_module"
-        ) as mock_import:
+        mock_client_instance.search.return_value = mock_async_submit
+        mock_client_instance.search_archive.return_value = mock_archive_result
+
+        with (
+            patch(
+                "momu_agent.tools.builtin.search.asyncio.to_thread"
+            ) as mock_to_thread,
+            patch(
+                "momu_agent.tools.builtin.search.importlib.import_module"
+            ) as mock_import,
+        ):
             mock_import.side_effect = _build_import_side_effect(
                 serpapi_client=mock_client_instance
             )
+            mock_to_thread.side_effect = [mock_async_submit, mock_archive_result]
             tool = SearchTool(backend="serpapi", serpapi_key="fake")
             result = await tool.run({"query": "calculate 2+2"})
 
         assert "2 + 2 = 4" in result
         assert "Math" in result
-        mock_client_instance.search.assert_called_once()
+        assert mock_to_thread.call_count == 2
 
     @pytest.mark.asyncio
     async def test_hybrid_prefers_tavily(self):
-        """测试混合模式优先使用 Tavily"""
+        """测试混合模式并行搜索时优先使用 Tavily 结果"""
         tavily_client_instance = Mock()
         serpapi_client_instance = Mock()
-        tavily_client_instance.search.return_value = {
-            "answer": "Tavily Result",
-            "results": [],
+        tavily_client_instance.search = AsyncMock(
+            return_value={
+                "answer": "Tavily Result",
+                "results": [],
+            }
+        )
+
+        async_submit = Mock()
+        async_submit.as_dict.return_value = {
+            "search_metadata": {"id": "sid-10", "status": "Processing"}
+        }
+        archive_result = {
+            "search_metadata": {"status": "Success"},
+            "organic_results": [
+                {"title": "SerpApi Result", "snippet": "snippet", "link": "..."}
+            ],
         }
 
-        with patch(
-            "momu_agent.tools.builtin.search.importlib.import_module"
-        ) as mock_import:
+        with (
+            patch(
+                "momu_agent.tools.builtin.search.asyncio.to_thread"
+            ) as mock_to_thread,
+            patch(
+                "momu_agent.tools.builtin.search.importlib.import_module"
+            ) as mock_import,
+        ):
             mock_import.side_effect = _build_import_side_effect(
                 tavily_client=tavily_client_instance,
                 serpapi_client=serpapi_client_instance,
             )
+            mock_to_thread.side_effect = [async_submit, archive_result]
             tool = SearchTool(
                 backend="hybrid", tavily_api_key="fake", serpapi_key="fake"
             )
             result = await tool.run({"query": "test"})
 
         assert "Tavily Result" in result
-        tavily_client_instance.search.assert_called_once()
-        serpapi_client_instance.search.assert_not_called()
+        tavily_client_instance.search.assert_awaited_once()
+        assert mock_to_thread.call_count == 2
 
     @pytest.mark.asyncio
     async def test_hybrid_fallback_to_serpapi(self):
-        """测试混合模式 Tavily 失败时回退到 SerpApi"""
+        """测试混合模式并行搜索时 Tavily 失败回退到 SerpApi"""
         tavily_client_instance = Mock()
-        tavily_client_instance.search.side_effect = Exception("API Error")
+        tavily_client_instance.search = AsyncMock(side_effect=Exception("API Error"))
 
         serpapi_client_instance = Mock()
-        serpapi_client_instance.search.return_value = {
+        async_submit = Mock()
+        async_submit.as_dict.return_value = {
+            "search_metadata": {"id": "sid-2", "status": "Processing"}
+        }
+        archive_result = {
+            "search_metadata": {"status": "Success"},
             "organic_results": [
                 {"title": "Fallback", "snippet": "SerpApi Result", "link": "..."}
-            ]
+            ],
         }
 
-        with patch(
-            "momu_agent.tools.builtin.search.importlib.import_module"
-        ) as mock_import:
+        with (
+            patch(
+                "momu_agent.tools.builtin.search.asyncio.to_thread"
+            ) as mock_to_thread,
+            patch(
+                "momu_agent.tools.builtin.search.importlib.import_module"
+            ) as mock_import,
+        ):
             mock_import.side_effect = _build_import_side_effect(
                 tavily_client=tavily_client_instance,
                 serpapi_client=serpapi_client_instance,
             )
+            mock_to_thread.side_effect = [async_submit, archive_result]
             tool = SearchTool(
                 backend="hybrid", tavily_api_key="fake", serpapi_key="fake"
             )
             result = await tool.run({"query": "test"})
 
         assert "Fallback" in result
-        tavily_client_instance.search.assert_called_once()
-        serpapi_client_instance.search.assert_called_once()
+        tavily_client_instance.search.assert_awaited_once()
+        assert mock_to_thread.call_count == 2
 
     @pytest.mark.asyncio
     async def test_hybrid_tavily_unavailable(self):
         """测试混合模式在没有 Tavily Key 时直接使用 SerpApi"""
         serpapi_client_instance = Mock()
-        serpapi_client_instance.search.return_value = {"organic_results": []}
+        async_submit = Mock()
+        async_submit.as_dict.return_value = {
+            "search_metadata": {"id": "sid-3", "status": "Processing"}
+        }
+        archive_result = {
+            "search_metadata": {"status": "Success"},
+            "organic_results": [],
+        }
 
-        with patch(
-            "momu_agent.tools.builtin.search.importlib.import_module"
-        ) as mock_import:
+        with (
+            patch(
+                "momu_agent.tools.builtin.search.asyncio.to_thread"
+            ) as mock_to_thread,
+            patch(
+                "momu_agent.tools.builtin.search.importlib.import_module"
+            ) as mock_import,
+        ):
             mock_import.side_effect = _build_import_side_effect(
                 serpapi_client=serpapi_client_instance
             )
+            mock_to_thread.side_effect = [async_submit, archive_result]
             tool = SearchTool(backend="hybrid", serpapi_key="fake")
             await tool.run({"query": "test"})
 
-        serpapi_client_instance.search.assert_called_once()
+        assert mock_to_thread.call_count == 2
 
 
 class TestSearchConvenienceFunctions:
