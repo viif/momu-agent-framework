@@ -2,7 +2,7 @@
 
 - MemoryItem: 记忆项数据结构
 - MemoryConfig: 记忆系统配置
-- BaseMemory: 记忆基类
+- Memory: 记忆基类
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ class MemoryConfig(BaseModel):
     )
 
 
-class BaseMemory(ABC):
+class Memory(ABC):
     """记忆基类。
 
     定义所有记忆类型的通用接口和行为。

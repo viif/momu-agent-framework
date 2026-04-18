@@ -13,10 +13,10 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from ..core.exceptions import MemoryException
-from .base import BaseMemory, MemoryConfig, MemoryItem
+from .base import Memory, MemoryConfig, MemoryItem
 
 
-class WorkingMemory(BaseMemory):
+class WorkingMemory(Memory):
     """工作记忆实现。
 
     特点：
