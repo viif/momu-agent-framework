@@ -210,7 +210,12 @@ class SearchTool(Tool):
 
 
 # 便捷函数
-async def search(query: str, backend: str = "hybrid") -> str:
+async def search(
+    query: str,
+    backend: str = "hybrid",
+    tavily_api_key: str | None = None,
+    serpapi_key: str | None = None,
+) -> str:
     """
     便捷的搜索函数
 
@@ -224,24 +229,30 @@ async def search(query: str, backend: str = "hybrid") -> str:
     Raises:
         ToolException: 如果配置无效或搜索失败
     """
-    tool = SearchTool(backend=backend)
+    tool = SearchTool(
+        backend=backend, tavily_api_key=tavily_api_key, serpapi_key=serpapi_key
+    )
     return await tool.run({"input": query})
 
 
 # 专用搜索函数
-async def search_tavily(query: str) -> str:
+async def search_tavily(query: str, tavily_api_key: str) -> str:
     """使用Tavily进行AI优化搜索"""
-    tool = SearchTool(backend="tavily")
+    tool = SearchTool(backend="tavily", tavily_api_key=tavily_api_key)
     return await tool.run({"input": query})
 
 
-async def search_serpapi(query: str) -> str:
+async def search_serpapi(query: str, serpapi_key: str) -> str:
     """使用SerpApi进行Google搜索"""
-    tool = SearchTool(backend="serpapi")
+    tool = SearchTool(backend="serpapi", serpapi_key=serpapi_key)
     return await tool.run({"input": query})
 
 
-async def search_hybrid(query: str) -> str:
+async def search_hybrid(
+    query: str, tavily_api_key: str | None = None, serpapi_key: str | None = None
+) -> str:
     """智能混合搜索，自动选择最佳搜索源"""
-    tool = SearchTool(backend="hybrid")
+    tool = SearchTool(
+        backend="hybrid", tavily_api_key=tavily_api_key, serpapi_key=serpapi_key
+    )
     return await tool.run({"input": query})

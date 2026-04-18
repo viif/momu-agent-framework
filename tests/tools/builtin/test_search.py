@@ -1,9 +1,15 @@
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from momu_agent.core.exceptions import ToolException
 from momu_agent.tools import SearchTool
+from momu_agent.tools.builtin.search import (
+    search,
+    search_hybrid,
+    search_serpapi,
+    search_tavily,
+)
 
 
 def _build_import_side_effect(
@@ -236,3 +242,81 @@ class TestSearchTool:
             await tool.run({"query": "test"})
 
         serpapi_client_instance.search.assert_called_once()
+
+
+class TestSearchConvenienceFunctions:
+    """测试便捷搜索函数"""
+
+    @pytest.mark.asyncio
+    async def test_search_calls_tool_run_with_input(self):
+        """测试 search 函数调用 Tool.run 并传入 input"""
+        with patch(
+            "momu_agent.tools.builtin.search.SearchTool"
+        ) as mock_search_tool_cls:
+            mock_tool = Mock()
+            mock_tool.run = AsyncMock(return_value="ok")
+            mock_search_tool_cls.return_value = mock_tool
+
+            result = await search(
+                "python", backend="hybrid", tavily_api_key="tk", serpapi_key="sk"
+            )
+
+        assert result == "ok"
+        mock_search_tool_cls.assert_called_once_with(
+            backend="hybrid", tavily_api_key="tk", serpapi_key="sk"
+        )
+        mock_tool.run.assert_awaited_once_with({"input": "python"})
+
+    @pytest.mark.asyncio
+    async def test_search_tavily_calls_tool_run(self):
+        """测试 search_tavily 函数使用 tavily 后端"""
+        with patch(
+            "momu_agent.tools.builtin.search.SearchTool"
+        ) as mock_search_tool_cls:
+            mock_tool = Mock()
+            mock_tool.run = AsyncMock(return_value="tavily result")
+            mock_search_tool_cls.return_value = mock_tool
+
+            result = await search_tavily("ai", tavily_api_key="tk")
+
+        assert result == "tavily result"
+        mock_search_tool_cls.assert_called_once_with(
+            backend="tavily", tavily_api_key="tk"
+        )
+        mock_tool.run.assert_awaited_once_with({"input": "ai"})
+
+    @pytest.mark.asyncio
+    async def test_search_serpapi_calls_tool_run(self):
+        """测试 search_serpapi 函数使用 serpapi 后端"""
+        with patch(
+            "momu_agent.tools.builtin.search.SearchTool"
+        ) as mock_search_tool_cls:
+            mock_tool = Mock()
+            mock_tool.run = AsyncMock(return_value="serp result")
+            mock_search_tool_cls.return_value = mock_tool
+
+            result = await search_serpapi("news", serpapi_key="sk")
+
+        assert result == "serp result"
+        mock_search_tool_cls.assert_called_once_with(
+            backend="serpapi", serpapi_key="sk"
+        )
+        mock_tool.run.assert_awaited_once_with({"input": "news"})
+
+    @pytest.mark.asyncio
+    async def test_search_hybrid_calls_tool_run(self):
+        """测试 search_hybrid 函数使用 hybrid 后端"""
+        with patch(
+            "momu_agent.tools.builtin.search.SearchTool"
+        ) as mock_search_tool_cls:
+            mock_tool = Mock()
+            mock_tool.run = AsyncMock(return_value="hybrid result")
+            mock_search_tool_cls.return_value = mock_tool
+
+            result = await search_hybrid("agent", tavily_api_key="tk", serpapi_key="sk")
+
+        assert result == "hybrid result"
+        mock_search_tool_cls.assert_called_once_with(
+            backend="hybrid", tavily_api_key="tk", serpapi_key="sk"
+        )
+        mock_tool.run.assert_awaited_once_with({"input": "agent"})
