@@ -57,7 +57,7 @@ jobs:
 
       - name: Install dependencies and local package
         run: |
-          uv sync --frozen --all-extras .
+          uv sync --frozen --all-extras
 
       - name: Run tests with pytest
         run: |
