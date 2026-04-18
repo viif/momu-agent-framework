@@ -172,7 +172,3 @@ class ToolRegistry:
         self._tools.clear()
         self._functions.clear()
         self.logger.info("🔧 所有工具已清空。")
-
-
-# 全局工具注册表
-global_registry = ToolRegistry()
