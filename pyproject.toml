@@ -18,6 +18,7 @@ search = [
 ]
 memory = [
     "aiosqlite>=0.22.1",
+    "chromadb>=1.5.8",
     "scikit-learn>=1.8.0",
 ]
 
