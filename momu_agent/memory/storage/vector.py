@@ -64,10 +64,6 @@ class VectorStore(ABC):
     async def get_collection_stats(self) -> dict[str, Any]:
         """获取集合统计。"""
 
-    @abstractmethod
-    async def health_check(self) -> bool:
-        """健康检查。"""
-
 
 class ChromaVectorStore(VectorStore):
     """Chroma 向量存储实现"""
@@ -164,6 +160,7 @@ class ChromaVectorStore(VectorStore):
         metadata: list[dict[str, Any]],
         ids: list[str] | None = None,
     ) -> bool:
+        """批量写入向量。"""
         try:
             if not vectors:
                 self.logger.warning("🧠 向量列表为空")
@@ -225,6 +222,7 @@ class ChromaVectorStore(VectorStore):
         score_threshold: float | None = None,
         where: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        """按向量相似度检索。"""
         try:
             if limit <= 0:
                 return []
@@ -266,6 +264,7 @@ class ChromaVectorStore(VectorStore):
             raise MemoryException(f"search_similar failed: {e}") from e
 
     async def delete_vectors(self, ids: list[str]) -> bool:
+        """按向量点 ID 批量删除。"""
         try:
             if not ids:
                 return True
@@ -282,6 +281,7 @@ class ChromaVectorStore(VectorStore):
             raise MemoryException(f"delete_vectors failed: {e}") from e
 
     async def delete_memories(self, memory_ids: list[str]) -> bool:
+        """按业务 memory_id 批量删除。"""
         try:
             if not memory_ids:
                 return True
@@ -306,6 +306,7 @@ class ChromaVectorStore(VectorStore):
             raise MemoryException(f"delete_memories failed: {e}") from e
 
     async def clear_collection(self) -> bool:
+        """清空集合。"""
         try:
             await self._ensure_collection()
             assert self._client is not None
@@ -328,6 +329,7 @@ class ChromaVectorStore(VectorStore):
             raise MemoryException(f"clear_collection failed: {e}") from e
 
     async def get_collection_info(self) -> dict[str, Any]:
+        """获取集合详情。"""
         try:
             await self._ensure_collection()
             assert self._collection is not None
@@ -364,6 +366,7 @@ class ChromaVectorStore(VectorStore):
             raise MemoryException(f"get_collection_info failed: {e}") from e
 
     async def get_collection_stats(self) -> dict[str, Any]:
+        """获取集合统计。"""
         try:
             info = await self.get_collection_info()
             info["store_type"] = "chroma"
@@ -372,16 +375,6 @@ class ChromaVectorStore(VectorStore):
         except Exception as e:
             self.logger.error(f"🧠 get_collection_stats 失败: {e}")
             raise MemoryException(f"get_collection_stats failed: {e}") from e
-
-    async def health_check(self) -> bool:
-        try:
-            await self._ensure_collection()
-            assert self._collection is not None
-            await asyncio.to_thread(self._collection.count)
-            return True
-        except Exception as e:
-            self.logger.error(f"🧠 health_check 失败: {e}")
-            return False
 
     async def close(self) -> None:
         """关闭连接并重置初始化状态。"""

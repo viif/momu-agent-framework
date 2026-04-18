@@ -197,10 +197,6 @@ async def test_get_collection_info_and_stats(store):
     assert "collection_path" in stats
 
 
-async def test_health_check(store):
-    assert await store.health_check()
-
-
 async def test_close_keeps_persistent_data(collection_path, ef):
     store1 = ChromaVectorStore(collection_path, embedding_function=ef)
     v1, m1, id1 = make_item(1)
