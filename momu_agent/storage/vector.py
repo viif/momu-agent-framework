@@ -18,7 +18,7 @@ from chromadb.api import ClientAPI
 from chromadb.api.models.Collection import Collection
 from chromadb.api.types import Embeddings, Metadata, Where
 
-from ..core.exceptions import MemoryException
+from ..core.exceptions import StorageException
 from ..utils.logger import get_logger
 
 
@@ -213,7 +213,7 @@ class ChromaVectorStore(VectorStore):
             return True
         except Exception as e:
             self.logger.error(f"🧠 add_vectors 失败: {e}")
-            raise MemoryException(f"add_vectors failed: {e}") from e
+            raise StorageException(f"add_vectors failed: {e}") from e
 
     async def search_similar(
         self,
@@ -261,7 +261,7 @@ class ChromaVectorStore(VectorStore):
             return items
         except Exception as e:
             self.logger.error(f"🧠 search_similar 失败: {e}")
-            raise MemoryException(f"search_similar failed: {e}") from e
+            raise StorageException(f"search_similar failed: {e}") from e
 
     async def delete_vectors(self, ids: list[str]) -> bool:
         """按向量点 ID 批量删除。"""
@@ -278,7 +278,7 @@ class ChromaVectorStore(VectorStore):
             return True
         except Exception as e:
             self.logger.error(f"🧠 delete_vectors 失败: {e}")
-            raise MemoryException(f"delete_vectors failed: {e}") from e
+            raise StorageException(f"delete_vectors failed: {e}") from e
 
     async def delete_memories(self, memory_ids: list[str]) -> bool:
         """按业务 memory_id 批量删除。"""
@@ -303,7 +303,7 @@ class ChromaVectorStore(VectorStore):
             return True
         except Exception as e:
             self.logger.error(f"🧠 delete_memories 失败: {e}")
-            raise MemoryException(f"delete_memories failed: {e}") from e
+            raise StorageException(f"delete_memories failed: {e}") from e
 
     async def clear_collection(self) -> bool:
         """清空集合。"""
@@ -326,7 +326,7 @@ class ChromaVectorStore(VectorStore):
             return True
         except Exception as e:
             self.logger.error(f"🧠 clear_collection 失败: {e}")
-            raise MemoryException(f"clear_collection failed: {e}") from e
+            raise StorageException(f"clear_collection failed: {e}") from e
 
     async def get_collection_info(self) -> dict[str, Any]:
         """获取集合详情。"""
@@ -363,7 +363,7 @@ class ChromaVectorStore(VectorStore):
             }
         except Exception as e:
             self.logger.error(f"🧠 get_collection_info 失败: {e}")
-            raise MemoryException(f"get_collection_info failed: {e}") from e
+            raise StorageException(f"get_collection_info failed: {e}") from e
 
     async def get_collection_stats(self) -> dict[str, Any]:
         """获取集合统计。"""
@@ -374,7 +374,7 @@ class ChromaVectorStore(VectorStore):
             return info
         except Exception as e:
             self.logger.error(f"🧠 get_collection_stats 失败: {e}")
-            raise MemoryException(f"get_collection_stats failed: {e}") from e
+            raise StorageException(f"get_collection_stats failed: {e}") from e
 
     async def close(self) -> None:
         """关闭连接并重置初始化状态。"""

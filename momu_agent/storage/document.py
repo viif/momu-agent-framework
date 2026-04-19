@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import aiosqlite
 
-from ..core.exceptions import MemoryException
+from ..core.exceptions import StorageException
 from ..utils.logger import get_logger
 
 
@@ -193,11 +193,11 @@ class SQLiteDocumentStore(DocumentStore):
                 f"importance: {importance})"
             )
             return memory_id
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 add_memory 失败: {e}")
-            raise MemoryException(f"add_memory failed: {e}") from e
+            raise StorageException(f"add_memory failed: {e}") from e
 
     async def get_memory(self, memory_id: str) -> dict[str, Any] | None:
         """按 ID 获取单条记忆，不存在时返回 None。"""
@@ -229,10 +229,10 @@ class SQLiteDocumentStore(DocumentStore):
                 else {},
                 "created_at": row["created_at"],
             }
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
-            raise MemoryException(f"get_memory failed: {e}") from e
+            raise StorageException(f"get_memory failed: {e}") from e
 
     async def search_memories(
         self,
@@ -297,11 +297,11 @@ class SQLiteDocumentStore(DocumentStore):
                 f"(user: {user_id!r}, type: {memory_type!r}, limit: {limit})"
             )
             return results
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 search_memories 失败: {e}")
-            raise MemoryException(f"search_memories failed: {e}") from e
+            raise StorageException(f"search_memories failed: {e}") from e
 
     async def update_memory(
         self,
@@ -341,11 +341,11 @@ class SQLiteDocumentStore(DocumentStore):
             else:
                 self.logger.warning(f"🧠 更新记忆失败，未找到 [{memory_id}]")
             return hit
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 update_memory 失败: {e}")
-            raise MemoryException(f"update_memory failed: {e}") from e
+            raise StorageException(f"update_memory failed: {e}") from e
 
     async def delete_memory(self, memory_id: str) -> bool:
         """删除指定记忆，返回是否命中记录。"""
@@ -363,11 +363,11 @@ class SQLiteDocumentStore(DocumentStore):
             else:
                 self.logger.warning(f"🧠 删除记忆失败，未找到 [{memory_id}]")
             return hit
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 delete_memory 失败: {e}")
-            raise MemoryException(f"delete_memory failed: {e}") from e
+            raise StorageException(f"delete_memory failed: {e}") from e
 
     async def get_database_stats(self) -> dict[str, Any]:
         """返回数据库统计信息，包括各表记录数、记忆类型分布和活跃用户 Top 10。"""
@@ -408,10 +408,10 @@ class SQLiteDocumentStore(DocumentStore):
                 "store_type": "sqlite",
                 "db_path": self.db_path,
             }
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
-            raise MemoryException(f"get_database_stats failed: {e}") from e
+            raise StorageException(f"get_database_stats failed: {e}") from e
 
     async def add_document(
         self,

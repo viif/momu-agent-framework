@@ -10,7 +10,7 @@ from typing import Any
 
 import kuzu
 
-from ..core.exceptions import MemoryException
+from ..core.exceptions import StorageException
 from ..utils.logger import get_logger
 
 
@@ -260,11 +260,11 @@ class KuzuGraphStore(GraphStore):
                 },
             )
             return True
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 add_entity 失败: {e}")
-            raise MemoryException(f"add_entity failed: {e}") from e
+            raise StorageException(f"add_entity failed: {e}") from e
 
     async def add_relationship(
         self,
@@ -322,11 +322,11 @@ class KuzuGraphStore(GraphStore):
                     },
                 )
             return True
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 add_relationship 失败: {e}")
-            raise MemoryException(f"add_relationship failed: {e}") from e
+            raise StorageException(f"add_relationship failed: {e}") from e
 
     async def find_related_entities(
         self,
@@ -380,11 +380,11 @@ class KuzuGraphStore(GraphStore):
             items = list(deduped.values())
             items.sort(key=lambda x: (int(x["distance"]), str(x.get("name", ""))))
             return items[:limit]
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 find_related_entities 失败: {e}")
-            raise MemoryException(f"find_related_entities failed: {e}") from e
+            raise StorageException(f"find_related_entities failed: {e}") from e
 
     async def search_entities_by_name(
         self,
@@ -416,11 +416,11 @@ class KuzuGraphStore(GraphStore):
                     continue
                 entities.append(entity)
             return entities
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 search_entities_by_name 失败: {e}")
-            raise MemoryException(f"search_entities_by_name failed: {e}") from e
+            raise StorageException(f"search_entities_by_name failed: {e}") from e
 
     async def get_entity_relationships(self, entity_id: str) -> list[dict[str, Any]]:
         try:
@@ -477,11 +477,11 @@ class KuzuGraphStore(GraphStore):
                 )
 
             return relationships
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 get_entity_relationships 失败: {e}")
-            raise MemoryException(f"get_entity_relationships failed: {e}") from e
+            raise StorageException(f"get_entity_relationships failed: {e}") from e
 
     async def delete_entity(self, entity_id: str) -> bool:
         try:
@@ -518,11 +518,11 @@ class KuzuGraphStore(GraphStore):
                     {"entity_id": entity_id},
                 )
             return True
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 delete_entity 失败: {e}")
-            raise MemoryException(f"delete_entity failed: {e}") from e
+            raise StorageException(f"delete_entity failed: {e}") from e
 
     async def clear_all(self) -> bool:
         try:
@@ -535,11 +535,11 @@ class KuzuGraphStore(GraphStore):
                 )
                 await self._run_query("MATCH (e:Entity) DELETE e")
             return True
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 clear_all 失败: {e}")
-            raise MemoryException(f"clear_all failed: {e}") from e
+            raise StorageException(f"clear_all failed: {e}") from e
 
     async def get_stats(self) -> dict[str, Any]:
         try:
@@ -562,11 +562,11 @@ class KuzuGraphStore(GraphStore):
                 "store_type": "kuzu",
                 "db_path": self.db_path,
             }
-        except MemoryException:
+        except StorageException:
             raise
         except Exception as e:
             self.logger.error(f"🧠 get_stats 失败: {e}")
-            raise MemoryException(f"get_stats failed: {e}") from e
+            raise StorageException(f"get_stats failed: {e}") from e
 
     async def close(self) -> None:
         if self._conn is not None:

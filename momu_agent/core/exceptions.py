@@ -35,3 +35,9 @@ class MemoryException(MomuAgentException):
     """记忆相关异常"""
 
     pass
+
+
+class StorageException(MomuAgentException):
+    """存储相关异常"""
+
+    pass
