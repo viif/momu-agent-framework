@@ -208,3 +208,6 @@ __marimo__/
 
 # claude code
 .claude/settings.local.json
+
+# model cache
+.model_cache
