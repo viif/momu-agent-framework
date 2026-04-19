@@ -12,6 +12,14 @@ from .core.exceptions import MomuAgentException
 from .core.llm import LLM
 from .core.message import Message
 from .tools.builtin.calculator import CalculatorTool, calculate
+from .tools.builtin.rag import (
+    RAGTool,
+    rag_add_document,
+    rag_add_text,
+    rag_ask,
+    rag_get_stats,
+    rag_search,
+)
 from .tools.builtin.search import SearchTool, search
 from .tools.chain import ToolChain, ToolChainManager
 from .tools.executor import ToolExecutor, run_batch_tool, run_parallel_tools
@@ -31,6 +39,12 @@ __all__ = [
     "calculate",
     "SearchTool",
     "search",
+    "RAGTool",
+    "rag_add_document",
+    "rag_add_text",
+    "rag_search",
+    "rag_ask",
+    "rag_get_stats",
     "ToolChain",
     "ToolChainManager",
     "ToolRegistry",
