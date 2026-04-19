@@ -13,11 +13,11 @@ ReActAgent 使用示例
 import asyncio
 
 from momu_agent.agents.react_agent import ReActAgent
-from momu_agent.core.config import Config
 from momu_agent.core.llm import LLM
 from momu_agent.tools.builtin.calculator import CalculatorTool
 from momu_agent.tools.builtin.search import SearchTool
 from momu_agent.tools.registry import ToolRegistry
+from momu_agent.utils.config import Config
 from momu_agent.utils.logger import setup_logger
 
 

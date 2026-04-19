@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 import pytest
 
-with patch("momu_agent.core.config.load_dotenv"):
-    from momu_agent.core.config import Config
+with patch("momu_agent.utils.config.load_dotenv"):
+    from momu_agent.utils.config import Config
 
 from momu_agent.core.exceptions import ConfigException
 
@@ -15,7 +15,7 @@ class TestConfig:
     @pytest.fixture(autouse=True)
     def mock_load_dotenv(self):
         """阻止 Config.from_env() 内部的 load_dotenv 读取真实 .env 文件"""
-        with patch("momu_agent.core.config.load_dotenv"):
+        with patch("momu_agent.utils.config.load_dotenv"):
             yield
 
     def _mock_env(self, **kwargs):

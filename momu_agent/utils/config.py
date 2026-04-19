@@ -6,7 +6,7 @@ from typing import Any
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from .exceptions import ConfigException
+from ..core.exceptions import ConfigException
 
 
 class Config(BaseModel):
@@ -29,6 +29,9 @@ class Config(BaseModel):
     # 搜索工具配置
     tavily_api_key: str | None = None
     serpapi_api_key: str | None = None
+
+    # 嵌入模型配置
+    embed_model_name: str | None = None
 
     @classmethod
     def from_env(cls, dotenv_path: str | None = None) -> "Config":
@@ -58,6 +61,7 @@ class Config(BaseModel):
             max_history_length=int(os.getenv("MAX_HISTORY_LENGTH", "100")),
             tavily_api_key=os.getenv("TAVILY_API_KEY"),
             serpapi_api_key=os.getenv("SERPAPI_API_KEY"),
+            embed_model_name=os.getenv("EMBED_MODEL_NAME"),
         )
 
     def to_dict(self) -> dict[str, Any]:

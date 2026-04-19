@@ -1,7 +1,7 @@
 """核心框架模块"""
 
+from ..utils.config import Config
 from .agent import Agent
-from .config import Config
 from .exceptions import MomuAgentException
 from .llm import LLM
 from .message import Message
