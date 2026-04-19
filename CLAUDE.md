@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，提供了完整的 Agent、工具系统和 LLM 接入能力。
+`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，提供 Agent、工具系统、记忆系统、存储层、RAG 能力和 LLM 接入能力。
 
 ## 包结构
 
@@ -20,10 +20,11 @@ momu_agent/
 │   ├── base.py         # Tool 抽象基类、ToolParameter（Tool.run 为 async）
 │   ├── registry.py     # ToolRegistry（execute_tool 为 async，支持 Tool 对象与函数两种注册方式）
 │   ├── chain.py        # ToolChain / ToolChainManager（顺序工具链，execute 为 async）
-│   ├── executor.py # 异步并发工具执行器
+│   ├── executor.py     # 异步并发工具执行器
 │   └── builtin/        # 内置工具
 │       ├── calculator.py  # 计算器工具
-│       └── search.py      # 搜索工具（Tavily / SerpAPI）
+│       ├── search.py      # 搜索工具（Tavily / SerpAPI）
+│       └── rag.py         # RAG 工具
 ├── agents/             # Agent 实现
 │   ├── simple_agent.py      # SimpleAgent（async，支持工具调用和流式输出）
 │   ├── react_agent.py       # ReActAgent（Thought → Action → Observation 循环）
@@ -31,8 +32,21 @@ momu_agent/
 │   ├── reflection_agent.py  # ReflectionAgent（初始生成 → 反思迭代 → 最终答案）
 │   └── parser/
 │       └── tool_parser.py   # 工具调用解析器
+├── memory/             # 记忆系统
+│   ├── base.py          # Memory 基类与配置
+│   ├── working.py       # WorkingMemory
+│   └── episodic.py      # EpisodicMemory
+├── storage/             # 存储层
+│   ├── document.py      # 文档存储
+│   ├── vector.py        # 向量存储
+│   └── graph.py         # 图存储（Kuzu）
+├── rag/                 # RAG 管线与文档处理
+│   ├── document.py      # 文档与切分
+│   └── pipeline.py      # 检索、索引、排序与聚合
 └── utils/
-    └── logger.py       # 日志工具
+    ├── config.py        # 配置辅助
+    ├── embedding.py     # 向量嵌入辅助
+    └── logger.py        # 日志工具
 ```
 
 ## 常用命令
@@ -41,6 +55,7 @@ momu_agent/
 
 ```bash
 # 开发环境安装
+uv sync
 uv sync --all-extras
 
 # 运行示例
@@ -48,11 +63,10 @@ uv run python examples/simple_agent_demo.py
 uv run python examples/react_agent_demo.py
 uv run python examples/plan_solve_agent_demo.py
 uv run python examples/reflection_agent_demo.py
+uv run python examples/rag_tool_demo.py
 
-# 运行所有测试
+# 运行测试
 uv run pytest
-
-# 运行单个测试
 uv run pytest tests/agents/test_simple_agent.py
 
 # 检查代码风格（不修改）
@@ -81,6 +95,13 @@ cp .env.example .env
 | `LLM_BASE_URL` | API 基础 URL（OpenAI 兼容） |
 
 可选环境变量：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`。
+
+## 依赖与扩展
+
+- 核心依赖包含 `colorama`、`openai`、`pydantic`、`python-dotenv`
+- 可选扩展包含 `search`、`memory`、`rag`
+- `memory` 额外依赖 `aiosqlite`、`chromadb`、`kuzu`、`scikit-learn`、`sentence-transformers`
+- `rag` 额外依赖 `aiosqlite`、`chromadb`、`markitdown`、`sentence-transformers`
 
 ## 异步约定
 
