@@ -18,8 +18,8 @@ from chromadb.api import ClientAPI
 from chromadb.api.models.Collection import Collection
 from chromadb.api.types import Embeddings, Metadata, Where
 
-from ...core.exceptions import MemoryException
-from ...utils.logger import get_logger
+from ..core.exceptions import MemoryException
+from ..utils.logger import get_logger
 
 
 class VectorStore(ABC):

@@ -4,7 +4,7 @@ from typing import cast
 import chromadb
 import pytest
 
-from momu_agent.memory.storage.vector import ChromaVectorStore, VectorStore
+from momu_agent.storage.vector import ChromaVectorStore, VectorStore
 
 
 class _SimpleEF(chromadb.EmbeddingFunction):

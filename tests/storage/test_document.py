@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 
 import pytest
 
-from momu_agent.memory.storage.document import DocumentStore, SQLiteDocumentStore
+from momu_agent.storage.document import DocumentStore, SQLiteDocumentStore
 
 # ---------------------------------------------------------------------------
 # Fixtures

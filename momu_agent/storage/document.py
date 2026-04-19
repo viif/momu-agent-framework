@@ -14,8 +14,8 @@ from uuid import uuid4
 
 import aiosqlite
 
-from ...core.exceptions import MemoryException
-from ...utils.logger import get_logger
+from ..core.exceptions import MemoryException
+from ..utils.logger import get_logger
 
 
 class DocumentStore(ABC):
