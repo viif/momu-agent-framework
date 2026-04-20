@@ -22,6 +22,7 @@ memory = [
     "kuzu>=0.11.3",
     "scikit-learn>=1.8.0",
     "sentence-transformers>=5.4.1",
+    "spacy>=3.8.14",
 ]
 rag = [
     "aiosqlite>=0.22.1",
