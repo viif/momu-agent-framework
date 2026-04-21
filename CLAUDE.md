@@ -8,23 +8,23 @@
 
 ## 包结构
 
-```
+```text
 momu_agent/
 ├── core/               # 核心模块
 │   ├── agent.py        # Agent 抽象基类
-│   ├── config.py       # 配置管理（从 .env 加载）
 │   ├── exceptions.py   # 异常定义
 │   ├── llm.py          # LLM 封装（OpenAI 兼容接口）
 │   └── message.py      # 消息数据结构
 ├── tools/              # 工具系统
 │   ├── base.py         # Tool 抽象基类、ToolParameter（Tool.run 为 async）
 │   ├── registry.py     # ToolRegistry（execute_tool 为 async，支持 Tool 对象与函数两种注册方式）
-│   ├── chain.py        # ToolChain / ToolChainManager（顺序工具链，execute 为 async）
+│   ├── chain.py        # ChainStep / ToolChain / ToolChainManager（顺序工具链）
 │   ├── executor.py     # 异步并发工具执行器
 │   └── builtin/        # 内置工具
 │       ├── calculator.py  # 计算器工具
 │       ├── search.py      # 搜索工具（Tavily / SerpAPI）
-│       └── rag.py         # RAG 工具
+│       ├── rag.py         # RAG 工具
+│       └── memory.py      # 记忆工具
 ├── agents/             # Agent 实现
 │   ├── simple_agent.py      # SimpleAgent（async，支持工具调用和流式输出）
 │   ├── react_agent.py       # ReActAgent（Thought → Action → Observation 循环）
@@ -35,16 +35,18 @@ momu_agent/
 ├── memory/             # 记忆系统
 │   ├── base.py          # Memory 基类与配置
 │   ├── working.py       # WorkingMemory
-│   └── episodic.py      # EpisodicMemory
-├── storage/             # 存储层
+│   ├── episodic.py      # EpisodicMemory
+│   ├── semantic.py      # SemanticMemory（向量+图谱）
+│   └── manager.py       # MemoryManager（多记忆类型统一管理）
+├── storage/            # 存储层
 │   ├── document.py      # 文档存储
 │   ├── vector.py        # 向量存储
 │   └── graph.py         # 图存储（Kuzu）
-├── rag/                 # RAG 管线与文档处理
+├── rag/                # RAG 管线与文档处理
 │   ├── document.py      # 文档与切分
 │   └── pipeline.py      # 检索、索引、排序与聚合
 └── utils/
-    ├── config.py        # 配置辅助
+    ├── config.py        # 配置管理（从 .env 加载）
     ├── embedding.py     # 向量嵌入辅助
     └── logger.py        # 日志工具
 ```
@@ -64,6 +66,7 @@ uv run python examples/react_agent_demo.py
 uv run python examples/plan_solve_agent_demo.py
 uv run python examples/reflection_agent_demo.py
 uv run python examples/rag_tool_demo.py
+uv run python examples/memory_tool_demo.py
 
 # 运行测试
 uv run pytest
@@ -94,18 +97,19 @@ cp .env.example .env
 | `LLM_API_KEY` | API 密钥 |
 | `LLM_BASE_URL` | API 基础 URL（OpenAI 兼容） |
 
-可选环境变量：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`。
+可选环境变量：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`、`EMBED_MODEL_NAME`。
 
 ## 依赖与扩展
 
 - 核心依赖包含 `colorama`、`openai`、`pydantic`、`python-dotenv`
 - 可选扩展包含 `search`、`memory`、`rag`
-- `memory` 额外依赖 `aiosqlite`、`chromadb`、`kuzu`、`scikit-learn`、`sentence-transformers`
+- `memory` 额外依赖 `aiosqlite`、`chromadb`、`kuzu`、`scikit-learn`、`sentence-transformers`、`spacy`
 - `rag` 额外依赖 `aiosqlite`、`chromadb`、`markitdown`、`sentence-transformers`
 
 ## 异步约定
 
-- `Agent.run()` 和 `Agent.stream_run()` 均为 `async` 方法，调用时需 `await` / `async for`
+- `Agent.run()` 为 `async` 抽象方法，调用时需 `await`
+- `SimpleAgent.stream_run()` 为 `async` 流式接口，调用时需 `async for`
 - `Tool.run()` 为 `async` 抽象方法；新增 Tool 子类需实现 `async def run()`
 - `ToolRegistry.execute_tool()` 为 `async` 方法；Tool 对象调用与函数工具调用统一走异步执行路径
 - `ToolChain.execute()` / `ToolChainManager.execute_chain()` 为 `async` 方法
@@ -138,5 +142,5 @@ cp .env.example .env
 ## CI
 
 CI 在推送/PR 到 `main` 分支时触发，分两个任务：
-- `lint`：检查 Ruff 格式和风格
-- `test`：在 Python 3.11、3.12、3.13 上运行 pytest
+- `lint`：Python 3.13 环境下执行 Ruff 检查与格式检查
+- `test`：在 Python 3.11、3.12、3.13 上安装全部扩展依赖并运行 pytest
