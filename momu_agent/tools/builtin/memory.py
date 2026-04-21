@@ -21,6 +21,7 @@ class MemoryTool(Tool):
         memory_types: list[str] | None = None,
         memory_manager: MemoryManager | None = None,
     ) -> None:
+        """初始化记忆工具并配置底层记忆管理器。"""
         super().__init__(
             name="memory",
             description="基于内置记忆系统的记忆工具，支持添加、检索、更新、删除和统计。",
@@ -36,10 +37,12 @@ class MemoryTool(Tool):
         )
 
     async def run(self, parameters: dict[str, Any]) -> str:
+        """根据 action 分发并执行对应记忆操作。"""
         action = str(parameters.get("action", "")).strip()
         if not action:
             raise ToolException("必须提供 action 参数")
 
+        # 显式分支保证 action 与处理方法一一对应，便于排查与扩展。
         if action == "add":
             return await self._add(parameters)
         if action == "search":
@@ -60,6 +63,7 @@ class MemoryTool(Tool):
         )
 
     def get_parameters(self) -> list[ToolParameter]:
+        """定义并返回记忆工具可用参数列表。"""
         return [
             ToolParameter(
                 name="action",
@@ -185,6 +189,7 @@ class MemoryTool(Tool):
         ]
 
     async def _add(self, parameters: dict[str, Any]) -> str:
+        """添加一条记忆并返回写入结果。"""
         content = str(parameters.get("content", "")).strip()
         if not content:
             raise ToolException("add 需要提供非空 content")
@@ -204,12 +209,14 @@ class MemoryTool(Tool):
         return f"已添加记忆: {memory_id}\n记忆类型: {resolved_type}"
 
     async def _search(self, parameters: dict[str, Any]) -> str:
+        """按条件检索记忆并格式化返回结果。"""
         query = str(parameters.get("query", "")).strip()
         if not query:
             raise ToolException("search 需要提供非空 query")
 
         memory_types = parameters.get("memory_types")
         single_type = parameters.get("memory_type")
+        # 兼容仅传 memory_type 的调用方式，内部统一为列表处理。
         if memory_types is None and single_type:
             memory_types = [str(single_type)]
         if memory_types is not None and not isinstance(memory_types, list):
@@ -217,6 +224,7 @@ class MemoryTool(Tool):
 
         start_time = self._parse_datetime(parameters.get("start_time"))
         end_time = self._parse_datetime(parameters.get("end_time"))
+        # 时间与阈值过滤统一下沉到 MemoryManager，工具层只做参数解析与校验。
         results = await self.memory_manager.retrieve_memories(
             query=query,
             memory_types=memory_types,
@@ -234,6 +242,7 @@ class MemoryTool(Tool):
             return f"未检索到与 '{query}' 相关的记忆"
 
         lines = [f"检索到 {len(results)} 条记忆："]
+        # 输出中保留 score 与 id，便于后续人工筛选和定向 update/remove。
         for index, memory in enumerate(results, start=1):
             score = float(memory.metadata.get("relevance_score", memory.importance))
             preview = (
@@ -247,6 +256,7 @@ class MemoryTool(Tool):
         return "\n".join(lines)
 
     async def _update(self, parameters: dict[str, Any]) -> str:
+        """更新指定记忆的内容、重要性或元数据。"""
         memory_id = str(parameters.get("memory_id", "")).strip()
         if not memory_id:
             raise ToolException("update 需要提供 memory_id")
@@ -262,6 +272,7 @@ class MemoryTool(Tool):
         return f"已更新记忆: {memory_id}"
 
     async def _remove(self, parameters: dict[str, Any]) -> str:
+        """删除指定 ID 的记忆。"""
         memory_id = str(parameters.get("memory_id", "")).strip()
         if not memory_id:
             raise ToolException("remove 需要提供 memory_id")
@@ -272,6 +283,7 @@ class MemoryTool(Tool):
         return f"已删除记忆: {memory_id}"
 
     async def _stats(self, parameters: dict[str, Any]) -> str:
+        """返回记忆系统的聚合统计信息。"""
         stats = await self.memory_manager.get_memory_stats()
         lines = [
             "记忆系统统计",
@@ -287,6 +299,7 @@ class MemoryTool(Tool):
         return "\n".join(lines)
 
     async def _forget(self, parameters: dict[str, Any]) -> str:
+        """按策略执行遗忘并返回处理数量。"""
         count = await self.memory_manager.forget_memories(
             strategy=str(parameters.get("strategy", "importance_based")),
             threshold=float(parameters.get("threshold", 0.1)),
@@ -297,10 +310,12 @@ class MemoryTool(Tool):
         return f"已遗忘 {count} 条记忆"
 
     async def _clear(self, parameters: dict[str, Any]) -> str:
+        """清空当前记忆管理器中的所有记忆。"""
         await self.memory_manager.clear_all_memories()
         return "已清空所有记忆"
 
     def _get_positive_int(self, value: Any, default: int, field_name: str) -> int:
+        """解析正整数参数，不合法时抛出工具异常。"""
         if value is None:
             return default
         try:
@@ -312,6 +327,7 @@ class MemoryTool(Tool):
         return resolved
 
     def _as_float(self, value: Any, field_name: str) -> float | None:
+        """解析浮点参数，空值返回 None。"""
         if value is None:
             return None
         try:
@@ -320,6 +336,7 @@ class MemoryTool(Tool):
             raise ToolException(f"{field_name} 必须是数字") from exc
 
     def _as_metadata(self, value: Any) -> dict[str, Any] | None:
+        """校验并复制 metadata 参数。"""
         if value is None:
             return None
         if not isinstance(value, dict):
@@ -327,12 +344,14 @@ class MemoryTool(Tool):
         return dict(value)
 
     def _as_optional_str(self, value: Any) -> str | None:
+        """将输入转换为去空白字符串，空串转为 None。"""
         if value is None:
             return None
         text = str(value).strip()
         return text or None
 
     def _parse_datetime(self, value: Any) -> datetime | None:
+        """解析 ISO 时间字符串为 datetime。"""
         text = self._as_optional_str(value)
         if text is None:
             return None
@@ -343,15 +362,19 @@ class MemoryTool(Tool):
 
 
 async def memory_add(content: str, **kwargs: Any) -> str:
+    """便捷函数：添加记忆。"""
+    # 便捷函数每次创建独立工具实例，适合脚本侧直接调用。
     tool = MemoryTool()
     return await tool.run({"action": "add", "content": content, **kwargs})
 
 
 async def memory_search(query: str, **kwargs: Any) -> str:
+    """便捷函数：检索记忆。"""
     tool = MemoryTool()
     return await tool.run({"action": "search", "query": query, **kwargs})
 
 
 async def memory_get_stats(**kwargs: Any) -> str:
+    """便捷函数：获取记忆统计。"""
     tool = MemoryTool()
     return await tool.run({"action": "stats", **kwargs})
