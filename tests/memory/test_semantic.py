@@ -542,6 +542,7 @@ async def test_get_stats_returns_semantic_aggregates(config):
     assert stats["count"] == 2
     assert stats["memory_type"] == "semantic"
     assert stats["concepts_count"] == 3
+    assert stats["entities_count"] == 3
     assert stats["graph_store"]["store_type"] == "fake-graph"
     assert stats["vector_store"]["store_type"] == "fake-vector"
 
@@ -563,3 +564,118 @@ async def test_add_keeps_graph_when_vector_write_fails(config):
     assert memory_id == "m1"
     assert "semantic:memory:m1" in graph_store.entities
     assert "semantic:m1" not in vector_store.points
+
+
+@pytest.mark.asyncio
+async def test_add_extracts_entities_and_persists_entity_graph_links(config):
+    graph_store = FakeGraphStore()
+    vector_store = FakeVectorStore()
+    memory = SemanticMemory(
+        config=config,
+        graph_store=graph_store,
+        vector_store=vector_store,
+    )
+
+    await memory.add(make_item("m1", "Anthropic builds Claude memory systems"))
+
+    assert "semantic:entity:anthropic" in graph_store.entities
+    assert (
+        graph_store.entities["semantic:entity:anthropic"]["type"] == "semantic_entity"
+    )
+    assert (
+        "semantic:memory:m1",
+        "semantic:entity:anthropic",
+        "MENTIONS_ENTITY",
+    ) in graph_store.relationships
+    assert (
+        "anthropic"
+        in graph_store.entities["semantic:memory:m1"]["properties"]["entities"]
+    )
+    assert "anthropic" in vector_store.points["semantic:m1"]["metadata"]["entities"]
+
+
+@pytest.mark.asyncio
+async def test_add_prefers_metadata_entities_when_provided(config):
+    graph_store = FakeGraphStore()
+    vector_store = FakeVectorStore()
+    memory = SemanticMemory(
+        config=config,
+        graph_store=graph_store,
+        vector_store=vector_store,
+    )
+
+    await memory.add(
+        make_item(
+            "m1",
+            "plain text without obvious entity",
+            metadata={
+                "entities": [
+                    {"name": "Claude Code", "entity_type": "PRODUCT"},
+                    "Anthropic",
+                ]
+            },
+        )
+    )
+
+    assert "semantic:entity:claudecode" in graph_store.entities
+    assert "semantic:entity:anthropic" in graph_store.entities
+    rel = graph_store.relationships[
+        ("semantic:memory:m1", "semantic:entity:claudecode", "MENTIONS_ENTITY")
+    ]
+    assert rel["relationship"]["properties"]["source"] == "metadata"
+    assert "claudecode" in vector_store.points["semantic:m1"]["metadata"]["entities"]
+
+
+@pytest.mark.asyncio
+async def test_update_rebuilds_entity_links(config):
+    graph_store = FakeGraphStore()
+    vector_store = FakeVectorStore()
+    memory = SemanticMemory(
+        config=config,
+        graph_store=graph_store,
+        vector_store=vector_store,
+    )
+
+    await memory.add(
+        make_item("m1", "Anthropic ships models", metadata={"entities": ["Anthropic"]})
+    )
+
+    updated = await memory.update(
+        "m1",
+        content="Claude Code ships tools",
+        metadata={"entities": [{"name": "Claude Code", "entity_type": "PRODUCT"}]},
+    )
+
+    assert updated is True
+    assert "semantic:entity:claudecode" in graph_store.entities
+    assert "semantic:entity:anthropic" not in graph_store.entities
+    assert (
+        "semantic:memory:m1",
+        "semantic:entity:claudecode",
+        "MENTIONS_ENTITY",
+    ) in graph_store.relationships
+
+
+@pytest.mark.asyncio
+async def test_entity_metadata_roundtrip_in_retrieve(config):
+    graph_store = FakeGraphStore()
+    vector_store = FakeVectorStore()
+    memory = SemanticMemory(
+        config=config,
+        graph_store=graph_store,
+        vector_store=vector_store,
+    )
+
+    await memory.add(
+        make_item(
+            "m1",
+            "Anthropic builds Claude memory systems",
+            metadata={"entities": ["Anthropic", "Claude"]},
+        )
+    )
+
+    results = await memory.retrieve("Anthropic memory", user_id="u1", limit=1)
+
+    assert [item.id for item in results] == ["m1"]
+    assert results[0].metadata["entities"] == ["anthropic", "claude"]
+    assert "relevance_score" in results[0].metadata

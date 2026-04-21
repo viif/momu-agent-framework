@@ -77,9 +77,121 @@ class SemanticMemory(Memory):
         self.graph_store = graph_store or KuzuGraphStore()
         self.vector_store = vector_store or ChromaVectorStore()
         self.embedder = get_text_embedder()
+        self._spacy_checked = False
+        self._spacy_nlp: Any | None = None
 
         self.logger = get_logger(__name__)
         self.logger.debug("🧠 SemanticMemory 初始化完成")
+
+    def _get_spacy_nlp(self) -> Any | None:
+        if self._spacy_checked:
+            return self._spacy_nlp
+
+        self._spacy_checked = True
+        try:
+            import spacy
+        except ImportError:
+            return None
+
+        for model_name in ("zh_core_web_sm", "en_core_web_sm"):
+            try:
+                self._spacy_nlp = spacy.load(model_name)
+                return self._spacy_nlp
+            except OSError:
+                continue
+            except Exception as e:
+                self.logger.debug(f"🧠 加载 spaCy 模型 {model_name} 失败: {e}")
+
+        return self._spacy_nlp
+
+    def _extract_entities(
+        self, text: str, metadata: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        if metadata is not None:
+            metadata_entities = self._normalize_entities(
+                metadata.get("entities"), source="metadata"
+            )
+            if metadata_entities:
+                return metadata_entities[:8]
+
+        nlp = self._get_spacy_nlp()
+        if nlp is not None:
+            try:
+                doc = nlp(text or "")
+                spacy_entities = self._normalize_entities(
+                    [
+                        {
+                            "name": ent.text,
+                            "normalized": ent.text,
+                            "entity_type": ent.label_ or "MISC",
+                            "source": "spacy",
+                        }
+                        for ent in doc.ents
+                    ],
+                    source="spacy",
+                )
+                if spacy_entities:
+                    return spacy_entities[:8]
+            except Exception as e:
+                self.logger.debug(f"🧠 spaCy 实体提取失败: {e}")
+
+        return self._normalize_entities(
+            self._CONCEPT_PATTERN.findall(text or ""), source="rule"
+        )[:8]
+
+    def _normalize_entities(
+        self, raw_entities: Any, source: str
+    ) -> list[dict[str, Any]]:
+        if raw_entities is None:
+            return []
+        if isinstance(raw_entities, (str, dict)):
+            raw_entities = [raw_entities]
+        if not isinstance(raw_entities, (list, tuple, set)):
+            return []
+
+        normalized_entities: dict[str, dict[str, Any]] = {}
+        for raw_entity in raw_entities:
+            if isinstance(raw_entity, dict):
+                name = str(
+                    raw_entity.get("name") or raw_entity.get("normalized") or ""
+                ).strip()
+                normalized = self._normalize_entity(
+                    str(raw_entity.get("normalized") or name)
+                )
+                entity_type = str(
+                    raw_entity.get("entity_type") or raw_entity.get("type") or "MISC"
+                )
+                entity_source = str(raw_entity.get("source") or source)
+                count = int(raw_entity.get("count") or 1)
+            else:
+                name = str(raw_entity).strip()
+                normalized = self._normalize_entity(name)
+                entity_type = "MISC"
+                entity_source = source
+                count = 1
+
+            if (
+                not normalized
+                or normalized in self._STOPWORDS
+                or len(normalized) < 2
+                or normalized.isdigit()
+            ):
+                continue
+
+            entity = normalized_entities.get(normalized)
+            if entity is None:
+                normalized_entities[normalized] = {
+                    "name": name or normalized,
+                    "normalized": normalized,
+                    "entity_type": entity_type,
+                    "source": entity_source,
+                    "count": max(count, 1),
+                }
+                continue
+
+            entity["count"] += max(count, 1)
+
+        return list(normalized_entities.values())
 
     async def add(self, memory_item: MemoryItem) -> str:
         """添加语义记忆。"""
@@ -87,11 +199,14 @@ class SemanticMemory(Memory):
             timestamp = int(memory_item.timestamp.timestamp())
             stored_metadata = dict(memory_item.metadata)
             concepts = self._extract_concepts(memory_item.content, stored_metadata)
+            entities = self._extract_entities(memory_item.content, stored_metadata)
             stored_metadata["concepts"] = concepts
+            stored_metadata["entities"] = entities
 
             memory_entity_id = self._memory_entity_id(memory_item.id)
             user_entity_id = self._user_entity_id(memory_item.user_id)
             vector_point_id = self._vector_point_id(memory_item.id)
+            entity_names = [entity["normalized"] for entity in entities]
 
             await self.graph_store.add_entity(
                 entity_id=user_entity_id,
@@ -112,6 +227,7 @@ class SemanticMemory(Memory):
                     "importance": memory_item.importance,
                     "metadata": stored_metadata,
                     "concepts": concepts,
+                    "entities": entity_names,
                     "vector_point_id": vector_point_id,
                 },
             )
@@ -146,6 +262,31 @@ class SemanticMemory(Memory):
                     },
                 )
 
+            for entity in entities:
+                entity_id = self._entity_entity_id(entity["normalized"])
+                await self.graph_store.add_entity(
+                    entity_id=entity_id,
+                    name=entity["name"],
+                    entity_type="semantic_entity",
+                    properties={
+                        "normalized": entity["normalized"],
+                        "entity_type": entity["entity_type"],
+                        "source": entity["source"],
+                    },
+                )
+                await self.graph_store.add_relationship(
+                    from_entity_id=memory_entity_id,
+                    to_entity_id=entity_id,
+                    relationship_type="MENTIONS_ENTITY",
+                    properties={
+                        "memory_id": memory_item.id,
+                        "weight": 1.0,
+                        "count": entity["count"],
+                        "source": entity["source"],
+                        "entity_type": entity["entity_type"],
+                    },
+                )
+
             vector = self._encode_text(memory_item.content)
             if vector is None:
                 return memory_item.id
@@ -158,6 +299,7 @@ class SemanticMemory(Memory):
                 "importance": memory_item.importance,
                 "content": memory_item.content,
                 "concepts": concepts,
+                "entities": entity_names,
             }
 
             try:
@@ -409,6 +551,7 @@ class SemanticMemory(Memory):
         """获取语义记忆统计信息。"""
         memories = await self._list_entities("semantic_memory")
         concepts = await self._list_entities("semantic_concept")
+        entities = await self._list_entities("semantic_entity")
         users = await self._list_entities("semantic_user")
 
         count = len(memories)
@@ -439,6 +582,7 @@ class SemanticMemory(Memory):
             "forgotten_count": 0,
             "total_count": count,
             "concepts_count": len(concepts),
+            "entities_count": len(entities),
             "users_count": len(users),
             "avg_importance": avg_importance,
             "time_span_days": time_span_days,
@@ -613,6 +757,9 @@ class SemanticMemory(Memory):
     def _concept_entity_id(self, concept: str) -> str:
         return f"semantic:concept:{concept}"
 
+    def _entity_entity_id(self, normalized: str) -> str:
+        return f"semantic:entity:{normalized}"
+
     def _vector_point_id(self, memory_id: str) -> str:
         return f"semantic:{memory_id}"
 
@@ -657,8 +804,11 @@ class SemanticMemory(Memory):
         )
         return ranked[:8]
 
-    def _normalize_concept(self, token: str) -> str:
+    def _normalize_entity(self, token: str) -> str:
         return token.strip().lower().replace(" ", "")
+
+    def _normalize_concept(self, token: str) -> str:
+        return self._normalize_entity(token)
 
     def _encode_text(self, text: str) -> list[float] | None:
         try:
@@ -758,6 +908,9 @@ class SemanticMemory(Memory):
         concepts = properties.get("concepts")
         if isinstance(concepts, list):
             metadata.setdefault("concepts", concepts)
+        entities = properties.get("entities")
+        if isinstance(entities, list):
+            metadata["entities"] = entities
         metadata.update(
             {
                 "relevance_score": relevance_score,
