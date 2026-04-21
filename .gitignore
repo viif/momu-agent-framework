@@ -211,3 +211,8 @@ __marimo__/
 
 # model cache
 .model_cache
+
+# local storage artifacts
+momu_agent/storage/chroma_data/
+momu_agent/storage/*.db
+momu_agent/storage/*.kuzu*

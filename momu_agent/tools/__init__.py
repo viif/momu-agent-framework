@@ -2,6 +2,7 @@
 
 from .base import Tool, ToolParameter
 from .builtin.calculator import CalculatorTool
+from .builtin.memory import MemoryTool, memory_add, memory_get_stats, memory_search
 from .builtin.rag import (
     RAGTool,
     rag_add_document,
@@ -25,11 +26,15 @@ __all__ = [
     "CalculatorTool",
     "SearchTool",
     "RAGTool",
+    "MemoryTool",
     "rag_add_document",
     "rag_add_text",
     "rag_search",
     "rag_ask",
     "rag_get_stats",
+    "memory_add",
+    "memory_search",
+    "memory_get_stats",
     "ToolExecutor",
     "run_parallel_tools",
     "run_batch_tool",
