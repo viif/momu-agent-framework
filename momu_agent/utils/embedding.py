@@ -1,4 +1,4 @@
-"""嵌入模块"""
+"""文本向量嵌入能力"""
 
 import os
 import threading
@@ -84,16 +84,12 @@ _embedder: Optional[EmbeddingModel] = None
 
 
 def create_embedding_model(model_name: str | None = None) -> EmbeddingModel:
-    """
-    工厂函数：创建具体的嵌入模型实例
-    """
+    """创建嵌入模型实例。"""
     return LocalTransformerEmbedding(model_name=model_name)
 
 
 def get_text_embedder() -> EmbeddingModel:
-    """
-    获取全局共享的文本嵌入实例（线程安全单例）
-    """
+    """获取全局共享的文本嵌入实例。"""
     global _embedder
     if _embedder is not None:
         return _embedder
@@ -107,9 +103,7 @@ def get_text_embedder() -> EmbeddingModel:
 
 
 def get_dimension(default: int = 384) -> int:
-    """
-    获取统一向量维度
-    """
+    """获取统一向量维度。"""
     try:
         return int(get_text_embedder().dimension)
     except Exception:
@@ -117,9 +111,7 @@ def get_dimension(default: int = 384) -> int:
 
 
 def refresh_embedder() -> EmbeddingModel:
-    """
-    强制重建嵌入实例。
-    """
+    """强制重建并返回嵌入实例。"""
     global _embedder
     with _lock:
         _embedder = create_embedding_model(

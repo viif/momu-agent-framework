@@ -1,4 +1,10 @@
-"""情景记忆实现。"""
+"""情景记忆实现
+
+- 具体交互事件存储
+- 时间序列组织
+- 上下文丰富的记忆
+- 模式识别能力
+"""
 
 from __future__ import annotations
 
@@ -37,6 +43,7 @@ class EpisodicMemory(Memory):
             properties = dict(memory_item.metadata)
             timestamp = int(memory_item.timestamp.timestamp())
 
+            # 先写入文档存储，保证向量写入失败时记忆仍可用。
             await self.document_store.add_memory(
                 memory_id=memory_item.id,
                 user_id=memory_item.user_id,
@@ -102,6 +109,7 @@ class EpisodicMemory(Memory):
                     where["session_id"] = session_id
 
                 try:
+                    # 优先向量召回，扩大候选集后再进行本地重排。
                     vector_hits = await self.vector_store.search_similar(
                         query_vector=query_vector,
                         limit=max(limit * 4, 20),
@@ -136,6 +144,7 @@ class EpisodicMemory(Memory):
                 )
                 recency_score = self._recency_score(int(doc.get("timestamp") or 0))
                 importance = float(doc.get("importance") or 0.5)
+                # 混合向量、关键词、时效性与重要性进行重排打分。
                 relevance_score = (
                     vector_score * 0.6
                     + keyword_score * 0.2
@@ -158,6 +167,7 @@ class EpisodicMemory(Memory):
                 seen_ids.add(memory_id)
 
             if len(ranked_items) < limit:
+                # 向量结果不足时，使用文档检索补全候选。
                 docs = await self.document_store.search_memories(
                     user_id=user_id,
                     memory_type="episodic",
@@ -258,6 +268,7 @@ class EpisodicMemory(Memory):
 
             vector = self._encode_text(new_content)
             if vector is not None:
+                # 先删除旧向量点，再写入新向量，避免同 ID 下的脏索引。
                 try:
                     await self.vector_store.delete_vectors(
                         [self._vector_point_id(memory_id)]
@@ -305,6 +316,7 @@ class EpisodicMemory(Memory):
                 )
             except Exception:
                 try:
+                    # 兼容不支持点 ID 删除的向量后端。
                     vector_deleted = await self.vector_store.delete_memories(
                         [memory_id]
                     )
@@ -351,6 +363,7 @@ class EpisodicMemory(Memory):
                     await self.vector_store.delete_vectors(point_ids)
                 except Exception:
                     try:
+                        # 批量清理时同样保留按 memory_id 的兜底路径。
                         await self.vector_store.delete_memories(ids)
                     except Exception as e:
                         self.logger.warning(f"🧠 清理向量索引失败: {e}")

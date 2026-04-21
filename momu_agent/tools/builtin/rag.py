@@ -1,4 +1,4 @@
-"""RAG工具"""
+"""RAG 工具"""
 
 from __future__ import annotations
 
@@ -39,10 +39,12 @@ class RAGTool(Tool):
         self._llm = llm
 
     async def run(self, parameters: dict[str, Any]) -> str:
+        """根据 action 分发并执行对应 RAG 操作。"""
         action = str(parameters.get("action", "")).strip()
         if not action:
             raise ToolException("必须提供 action 参数")
 
+        # 按 action 分发到对应的 RAG 流程。
         if action == "add_document":
             return await self._add_document(parameters)
         if action == "add_text":
@@ -60,6 +62,7 @@ class RAGTool(Tool):
         )
 
     def get_parameters(self) -> list[ToolParameter]:
+        """返回工具参数定义。"""
         return [
             ToolParameter(
                 name="action",
@@ -142,6 +145,8 @@ class RAGTool(Tool):
         ]
 
     async def _add_document(self, parameters: dict[str, Any]) -> str:
+        """导入文件并完成入库。"""
+        # 校验输入并组装入库参数。
         file_path = str(parameters.get("file_path", "")).strip()
         if not file_path:
             raise ToolException("add_document 需要提供 file_path")
@@ -163,6 +168,7 @@ class RAGTool(Tool):
             chunk_overlap=chunk_overlap,
         )
 
+        # 调用 pipeline 完成切分、向量化与索引写入。
         try:
             chunk_count = await pipeline["add_documents"]([str(path)])
         except Exception as e:
@@ -173,6 +179,8 @@ class RAGTool(Tool):
         )
 
     async def _add_text(self, parameters: dict[str, Any]) -> str:
+        """导入文本并完成入库。"""
+        # 将内联文本标准化为文档并按切分策略入库。
         text = str(parameters.get("text", "")).strip()
         if not text:
             raise ToolException("add_text 需要提供非空 text")
@@ -214,6 +222,7 @@ class RAGTool(Tool):
                 for chunk in chunks
                 if chunk.content.strip()
             ]
+            # 写入向量存储并返回实际入库分块数。
             chunk_count = await index_chunks(items, namespace=namespace)
         except Exception as e:
             raise ToolException(f"添加文本失败: {e}") from e
@@ -225,6 +234,8 @@ class RAGTool(Tool):
         )
 
     async def _search(self, parameters: dict[str, Any]) -> str:
+        """执行检索并返回格式化结果。"""
+        # 参数归一化后执行向量检索，并格式化为可读结果。
         query = self._get_query(parameters)
         if not query:
             raise ToolException("search 需要提供 query 或 question")
@@ -248,6 +259,8 @@ class RAGTool(Tool):
         return self._format_search_results(query, results)
 
     async def _ask(self, parameters: dict[str, Any]) -> str:
+        """基于检索上下文生成回答。"""
+        # 先检索相关片段，再将压缩上下文交给 LLM 生成回答。
         question = self._get_query(parameters)
         if not question:
             raise ToolException("ask 需要提供 question 或 query")
@@ -277,6 +290,7 @@ class RAGTool(Tool):
                 "可以尝试换个关键词，或先添加相关文档。"
             )
 
+        # 合并候选片段，控制上下文长度，降低无关噪声。
         context = merge_snippets(results, max_chars=max_chars)
         llm = self._get_llm()
 
@@ -291,6 +305,7 @@ class RAGTool(Tool):
         return self._format_answer(answer.strip(), results)
 
     async def _stats(self, parameters: dict[str, Any]) -> str:
+        """返回指定命名空间的存储统计信息。"""
         namespace = self._resolve_namespace(parameters)
         pipeline = self._create_pipeline(namespace=namespace)
 
@@ -309,6 +324,7 @@ class RAGTool(Tool):
         chunk_overlap: int | None = None,
         top_k: int | None = None,
     ) -> dict[str, Any]:
+        """创建带默认参数的 RAG pipeline。"""
         return create_rag_pipeline(
             namespace=namespace,
             chunk_size=chunk_size or self.chunk_size,
@@ -319,6 +335,7 @@ class RAGTool(Tool):
         )
 
     def _get_llm(self) -> LLM:
+        """获取或初始化 LLM 实例。"""
         if self._llm is not None:
             return self._llm
 
@@ -337,6 +354,7 @@ class RAGTool(Tool):
             raise ToolException(f"初始化 LLM 失败: {e}") from e
 
     def _build_messages(self, question: str, context: str) -> list[dict[str, str]]:
+        """构造问答请求消息。"""
         return [
             {
                 "role": "system",

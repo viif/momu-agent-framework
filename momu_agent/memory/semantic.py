@@ -1,4 +1,10 @@
-"""语义记忆实现。"""
+"""语义记忆实现
+
+- 中文预训练模型进行文本嵌入
+- 向量相似度检索进行快速初筛
+- 知识图谱进行实体关系推理
+- 混合检索策略优化结果质量
+"""
 
 from __future__ import annotations
 
@@ -198,6 +204,7 @@ class SemanticMemory(Memory):
         try:
             timestamp = int(memory_item.timestamp.timestamp())
             stored_metadata = dict(memory_item.metadata)
+            # 1) 提取概念与实体并回填到 metadata。
             concepts = self._extract_concepts(memory_item.content, stored_metadata)
             entities = self._extract_entities(memory_item.content, stored_metadata)
             stored_metadata["concepts"] = concepts
@@ -208,6 +215,7 @@ class SemanticMemory(Memory):
             vector_point_id = self._vector_point_id(memory_item.id)
             entity_names = [entity["normalized"] for entity in entities]
 
+            # 2) 写入用户节点与记忆节点。
             await self.graph_store.add_entity(
                 entity_id=user_entity_id,
                 name=memory_item.user_id,
@@ -232,6 +240,7 @@ class SemanticMemory(Memory):
                 },
             )
 
+            # 3) 建立用户拥有该记忆的关系。
             await self.graph_store.add_relationship(
                 from_entity_id=user_entity_id,
                 to_entity_id=memory_entity_id,
@@ -242,6 +251,7 @@ class SemanticMemory(Memory):
                 },
             )
 
+            # 4) 写入概念节点与记忆-概念关系。
             for concept in concepts:
                 concept_entity_id = self._concept_entity_id(concept)
                 await self.graph_store.add_entity(
@@ -262,6 +272,7 @@ class SemanticMemory(Memory):
                     },
                 )
 
+            # 5) 写入实体节点与记忆-实体关系。
             for entity in entities:
                 entity_id = self._entity_entity_id(entity["normalized"])
                 await self.graph_store.add_entity(
@@ -287,6 +298,7 @@ class SemanticMemory(Memory):
                     },
                 )
 
+            # 6) 写入向量索引，失败时保留图记忆结果。
             vector = self._encode_text(memory_item.content)
             if vector is None:
                 return memory_item.id
@@ -332,6 +344,7 @@ class SemanticMemory(Memory):
             seen_ids: set[str] = set()
             ranked_items: list[tuple[float, MemoryItem]] = []
 
+            # 1) 优先走向量召回，获取高相关候选。
             query_vector = self._encode_text(query)
             vector_hits: list[dict[str, Any]] = []
             if query_vector is not None:
@@ -349,6 +362,7 @@ class SemanticMemory(Memory):
                 except Exception as e:
                     self.logger.warning(f"🧠 向量检索失败，回退图检索: {e}")
 
+            # 2) 对向量候选做过滤并融合多路得分。
             for hit in vector_hits:
                 metadata = hit.get("metadata") or {}
                 memory_id = str(metadata.get("memory_id") or "")
@@ -403,6 +417,7 @@ class SemanticMemory(Memory):
                 )
                 seen_ids.add(memory_id)
 
+            # 3) 当向量召回不足时，回退到图谱候选补全。
             if len(ranked_items) < limit:
                 graph_candidates = await self._graph_fallback_candidates(
                     query_concepts,
@@ -457,6 +472,7 @@ class SemanticMemory(Memory):
                     )
                     seen_ids.add(memory_id)
 
+            # 4) 按相关性排序并返回 Top-K。
             ranked_items.sort(key=lambda item: item[0], reverse=True)
             return [memory_item for _, memory_item in ranked_items[:limit]]
         except MemoryException:
@@ -474,6 +490,7 @@ class SemanticMemory(Memory):
     ) -> bool:
         """更新语义记忆。"""
         try:
+            # 1) 读取旧快照并合并更新字段。
             existing = await self._get_memory_entity(memory_id)
             if existing is None:
                 return False
@@ -495,6 +512,7 @@ class SemanticMemory(Memory):
                 metadata=merged_metadata,
             )
 
+            # 2) 先删旧图和旧向量，再重建新版本。
             graph_deleted = await self._delete_memory_graph(memory_id)
             if not graph_deleted:
                 return False
@@ -503,6 +521,7 @@ class SemanticMemory(Memory):
             try:
                 await self.add(updated_item)
             except Exception as e:
+                # 3) 重建失败时尝试回滚旧快照。
                 try:
                     await self.add(snapshot)
                 except Exception as restore_error:
@@ -606,6 +625,7 @@ class SemanticMemory(Memory):
         to_remove: list[str] = []
 
         if strategy == "importance_based":
+            # 低重要性优先遗忘。
             for entity in memories:
                 properties = dict(entity.get("properties") or {})
                 if float(properties.get("importance") or 0.0) < threshold:
@@ -613,6 +633,7 @@ class SemanticMemory(Memory):
                         str(properties.get("memory_id") or entity.get("name"))
                     )
         elif strategy == "time_based":
+            # 超过时间窗口的旧记忆优先遗忘。
             cutoff = now - timedelta(days=max_age_days)
             for entity in memories:
                 properties = dict(entity.get("properties") or {})
@@ -624,6 +645,7 @@ class SemanticMemory(Memory):
                         str(properties.get("memory_id") or entity.get("name"))
                     )
         elif strategy == "capacity_based" and len(memories) > self.config.max_capacity:
+            # 超出容量时按重要性和时间排序淘汰。
             ordered = sorted(
                 memories,
                 key=lambda entity: (
@@ -641,6 +663,7 @@ class SemanticMemory(Memory):
             )
 
         forgotten = 0
+        # 执行去重后的删除，返回实际遗忘数量。
         for memory_id in dict.fromkeys(to_remove):
             if memory_id and await self.remove(memory_id):
                 forgotten += 1

@@ -1,4 +1,4 @@
-"""RAG 文档处理模块。"""
+"""RAG 文档加载与切分"""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ class Document:
     doc_id: str | None = None
 
     def __post_init__(self) -> None:
+        # 默认用内容哈希生成稳定文档 ID。
         if self.doc_id is None:
             self.doc_id = hashlib.md5(self.content.encode("utf-8")).hexdigest()
 
@@ -33,6 +34,7 @@ class DocumentChunk:
     chunk_index: int = 0
 
     def __post_init__(self) -> None:
+        # 基于文档、位置和局部内容生成可复现的块 ID。
         if self.chunk_id is None:
             basis = f"{self.doc_id or ''}:{self.chunk_index}:{self.content[:64]}"
             self.chunk_id = hashlib.md5(basis.encode("utf-8")).hexdigest()
@@ -57,6 +59,8 @@ class DocumentProcessor:
         self.separators = separators or ["\n\n", "\n", "。", ".", " "]
 
     def process_document(self, document: Document) -> list[DocumentChunk]:
+        """切分单个文档并补齐分块元数据。"""
+        # 先按规则切分文本，再为每个块补齐检索所需元数据。
         chunks = self._split_text(document.content)
         total = len(chunks)
         processed: list[DocumentChunk] = []
@@ -82,12 +86,14 @@ class DocumentProcessor:
         return processed
 
     def process_documents(self, documents: list[Document]) -> list[DocumentChunk]:
+        """批量切分多个文档。"""
         all_chunks: list[DocumentChunk] = []
         for document in documents:
             all_chunks.extend(self.process_document(document))
         return all_chunks
 
     def _split_text(self, text: str) -> list[str]:
+        """按窗口与分隔符策略切分文本。"""
         stripped = text.strip()
         if not stripped:
             return []
@@ -99,6 +105,7 @@ class DocumentProcessor:
         text_len = len(text)
 
         while start < text_len:
+            # 先按 chunk_size 截断，再尽量回退到自然分隔符处切分。
             end = min(start + self.chunk_size, text_len)
             if end >= text_len:
                 chunk = text[start:].strip()
@@ -117,12 +124,14 @@ class DocumentProcessor:
             if split >= text_len:
                 break
 
+            # 通过重叠窗口保留上下文连续性。
             next_start = max(split - self.chunk_overlap, start + 1)
             start = next_start
 
         return chunks
 
     def _find_split_point(self, text: str, start: int, end: int) -> int:
+        # 优先在窗口尾部附近寻找分隔符，减少语义截断。
         for separator in self.separators:
             window_start = max(start, end - 100)
             for i in range(end - len(separator), window_start - 1, -1):
@@ -133,6 +142,7 @@ class DocumentProcessor:
     def merge_chunks(
         self, chunks: list[DocumentChunk], max_length: int = 2000
     ) -> list[DocumentChunk]:
+        """按长度约束合并相邻分块。"""
         if not chunks:
             return []
 
@@ -145,6 +155,7 @@ class DocumentProcessor:
         )
 
         for chunk in chunks[1:]:
+            # 同文档且不超长时合并，降低召回时碎片化。
             can_merge = (
                 current.doc_id == chunk.doc_id
                 and len(current.content) + 1 + len(chunk.content) <= max_length
@@ -181,6 +192,8 @@ class DocumentProcessor:
 
 
 def _load_with_markitdown(file_path: str) -> str | None:
+    """优先使用 MarkItDown 读取文档内容。"""
+    # 优先使用 MarkItDown 兼容多格式输入。
     try:
         from markitdown import MarkItDown
     except ImportError:
@@ -202,8 +215,10 @@ def _load_with_fallback(file_path: str, encoding: str = "utf-8") -> str:
 
 
 def load_text_file(file_path: str, encoding: str = "utf-8") -> Document:
+    """从文件加载文本并构建文档对象。"""
     path = Path(file_path)
     content = _load_with_markitdown(file_path)
+    # MarkItDown 不可用或失败时回退到普通文本读取。
     if content is None:
         content = _load_with_fallback(file_path, encoding=encoding)
 
@@ -217,4 +232,5 @@ def load_text_file(file_path: str, encoding: str = "utf-8") -> Document:
 
 
 def create_document(content: str, **metadata: Any) -> Document:
+    """根据文本与元数据创建文档对象。"""
     return Document(content=content, metadata=dict(metadata))

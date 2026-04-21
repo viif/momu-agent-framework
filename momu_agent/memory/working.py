@@ -1,4 +1,4 @@
-"""工作记忆实现。
+"""工作记忆实现
 
 - 短期上下文管理
 - 容量和时间限制
@@ -37,6 +37,7 @@ class WorkingMemory(Memory):
         self.session_start = datetime.now()
 
         self.memories: list[MemoryItem] = []
+        # 堆只保存当前记忆的优先级快照；更新后会整体重建，避免维护复杂的 decrease-key。
         self.memory_heap: list[tuple[float, datetime, MemoryItem]] = []
 
         self.logger = get_logger(__name__)
@@ -48,14 +49,17 @@ class WorkingMemory(Memory):
     async def add(self, memory_item: MemoryItem) -> str:
         """添加工作记忆。"""
         try:
+            # 写入前先清理过期项，避免过期数据参与容量和 token 计算。
             self._expire_old_memories()
             priority = self._calculate_priority(memory_item)
 
             heapq.heappush(
                 self.memory_heap, (-priority, memory_item.timestamp, memory_item)
             )
+            # 列表用于遍历/筛选，堆用于优先级排序；两者需保持同步。
             self.memories.append(memory_item)
 
+            # 这里用词数近似 token，和容量控制保持一致。
             self.current_tokens += len(memory_item.content.split())
             await self._enforce_capacity_limits()
 
@@ -96,6 +100,7 @@ class WorkingMemory(Memory):
 
             vector_scores: dict[str, float] = {}
             try:
+                # 优先使用向量相似度；依赖不可用时回退到关键词匹配。
                 from sklearn.feature_extraction.text import TfidfVectorizer
                 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -129,13 +134,17 @@ class WorkingMemory(Memory):
                         keyword_score = len(intersection) / len(union) * 0.8
 
                 if vector_score > 0:
+                    # 语义匹配可用时，以语义为主、关键词为辅做融合。
                     base_relevance = vector_score * 0.7 + keyword_score * 0.3
                 else:
+                    # 语义匹配不可用时，仅使用关键词得分。
                     base_relevance = keyword_score
 
+                # 时间越久衰减越强，避免旧记忆长期占据前列。
                 time_decay = self._calculate_time_decay(memory.timestamp)
                 base_relevance *= time_decay
 
+                # 在相关性基础上再乘以重要性权重。
                 importance_weight = 0.8 + (memory.importance * 0.4)
                 final_score = base_relevance * importance_weight
 
@@ -179,6 +188,7 @@ class WorkingMemory(Memory):
             if metadata is not None:
                 memory.metadata.update(metadata)
 
+            # 内容/重要性变化都会影响排序，需刷新堆并重新校验容量限制。
             self._update_heap_priority()
             await self._enforce_capacity_limits()
             self.logger.debug(f"🧠 更新工作记忆 [{memory_id}] 成功")
@@ -196,6 +206,7 @@ class WorkingMemory(Memory):
             removed_memory = self.memories.pop(index)
             self.current_tokens -= len(removed_memory.content.split())
             self.current_tokens = max(0, self.current_tokens)
+            # 删除后重建堆，避免残留条目影响后续优先级淘汰。
             self._update_heap_priority()
             self.logger.debug(
                 f"🧠 删除工作记忆 [{memory_id}]，剩余: {len(self.memories)} 条"
@@ -312,16 +323,19 @@ class WorkingMemory(Memory):
         to_remove: list[str] = []
 
         cutoff_ttl = current_time - timedelta(minutes=self.max_age_minutes)
+        # 先统一收集 TTL 过期项，确保任意策略下都不会保留超时数据。
         for memory in self.memories:
             if memory.timestamp < cutoff_ttl:
                 to_remove.append(memory.id)
 
         if strategy == "importance_based":
+            # 删除低于重要性阈值的记忆。
             for memory in self.memories:
                 if memory.importance < threshold:
                     to_remove.append(memory.id)
         elif strategy == "time_based":
             cutoff_time = current_time - timedelta(hours=max_age_days * 24)
+            # 删除早于给定时间窗口的记忆。
             for memory in self.memories:
                 if memory.timestamp < cutoff_time:
                     to_remove.append(memory.id)
@@ -331,9 +345,11 @@ class WorkingMemory(Memory):
                 key=lambda memory: self._calculate_priority(memory),
             )
             excess_count = len(self.memories) - self.max_capacity
+            # 仅删除超出容量的最低优先级部分。
             for memory in sorted_memories[:excess_count]:
                 to_remove.append(memory.id)
 
+        # 去重后再删除，避免同一记忆被多种策略重复计数。
         for memory_id in dict.fromkeys(to_remove):
             if await self.remove(memory_id):
                 forgotten_count += 1
@@ -360,6 +376,7 @@ class WorkingMemory(Memory):
 
     async def _enforce_capacity_limits(self) -> None:
         """强制执行容量限制。"""
+        # 先按条目数裁剪，再按 token 裁剪，最终满足双重约束。
         while len(self.memories) > self.max_capacity:
             self.logger.warning(
                 f"🧠 工作记忆超出容量限制 ({len(self.memories)}/{self.max_capacity})，移除最低优先级记忆"
@@ -396,6 +413,7 @@ class WorkingMemory(Memory):
         )
         self.memories = kept
         self.current_tokens = max(0, self.current_tokens - removed_token_sum)
+        # 清理后直接重建堆，保证后续容量淘汰仍按最新优先级判断。
         self.memory_heap = []
         for memory in self.memories:
             priority = self._calculate_priority(memory)
@@ -406,11 +424,13 @@ class WorkingMemory(Memory):
         if not self.memories:
             return
 
+        # 实时重算最小优先级，避免依赖可能滞后的堆快照。
         lowest_memory = min(self.memories, key=self._calculate_priority)
         await self.remove(lowest_memory.id)
 
     def _update_heap_priority(self) -> None:
         """更新堆中记忆的优先级。"""
+        # 堆不做增量调整，统一重建以保证实现简单且状态一致。
         self.memory_heap = []
         for item in self.memories:
             priority = self._calculate_priority(item)

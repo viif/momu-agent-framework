@@ -1,4 +1,4 @@
-"""RAG pipeline 核心流程。"""
+"""RAG 检索与索引流程"""
 
 from __future__ import annotations
 
@@ -21,12 +21,15 @@ def load_and_chunk_texts(
     processor: DocumentProcessor | None = None,
     namespace: str = "default",
 ) -> list[dict[str, Any]]:
+    """加载文件并转换为可索引分块。"""
+    # 优先复用外部传入的处理器，便于在 pipeline 外统一配置切分策略。
     doc_processor = processor or DocumentProcessor(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
 
     items: list[dict[str, Any]] = []
+    # 基于 chunk 内容去重，避免重复文本被重复索引。
     seen_hashes: set[str] = set()
 
     for file_path in file_paths:
@@ -44,6 +47,7 @@ def load_and_chunk_texts(
                 continue
             seen_hashes.add(content_hash)
 
+            # 将来源、分片信息和 namespace 合并到 metadata，供后续检索过滤。
             metadata = {
                 "source": source,
                 "doc_id": chunk.doc_id,
@@ -87,6 +91,7 @@ async def index_chunks(
     batch_size: int = 32,
     namespace: str = "default",
 ) -> int:
+    """将分块写入文档库和向量库。"""
     if not chunks:
         return 0
 
@@ -100,6 +105,7 @@ async def index_chunks(
     all_metadata: list[dict[str, Any]] = []
     all_ids: list[str] = []
 
+    # 分批 embedding，减少一次性编码造成的内存和延迟压力。
     for i in range(0, len(chunks), max(1, batch_size)):
         batch = chunks[i : i + max(1, batch_size)]
         contents = [item.get("content", "") for item in batch]
@@ -113,6 +119,7 @@ async def index_chunks(
             )
             content = str(item.get("content") or "")
             metadata = dict(item.get("metadata") or {})
+            # 统一补齐 RAG 存储字段，保证向量库和文档库可用同一套元数据。
             metadata.update(
                 {
                     "memory_id": chunk_id,
@@ -126,6 +133,7 @@ async def index_chunks(
             )
 
             normalized = _normalize_vector(vec, expected_dim)
+            # 先写入文档存储，作为向量检索失败时的兜底数据源。
             await doc_store.add_memory(
                 memory_id=chunk_id,
                 user_id=str(metadata.get("user_id", "rag_user")),
@@ -152,6 +160,7 @@ def embed_query(
     embedder: EmbeddingModel | None = None,
     expected_dim: int | None = None,
 ) -> list[float]:
+    """将查询文本编码为统一维度向量。"""
     text_embedder = embedder or get_text_embedder()
     dim = int(expected_dim or get_dimension())
     vector = text_embedder.encode(query)
@@ -169,10 +178,12 @@ async def search_vectors(
     embedder: EmbeddingModel | None = None,
     where: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    """执行向量检索并在异常时回退关键词检索。"""
     vector_store = store or ChromaVectorStore()
     doc_store = document_store or SQLiteDocumentStore()
 
     query_vector = embed_query(query, embedder=embedder)
+    # 默认按 memory_type + namespace 约束检索范围，避免跨场景污染结果。
     conditions: dict[str, Any] = {
         "memory_type": "rag_chunk",
         "rag_namespace": namespace,
@@ -181,6 +192,7 @@ async def search_vectors(
         conditions.update(where)
 
     try:
+        # 主路径：走向量检索，获取语义相近结果。
         return await vector_store.search_similar(
             query_vector=query_vector,
             limit=top_k,
@@ -188,6 +200,7 @@ async def search_vectors(
             where=conditions,
         )
     except Exception:
+        # 兜底路径：向量检索异常时退化为文档库 + 关键词打分。
         docs = await doc_store.search_memories(
             memory_type="rag_chunk", limit=max(top_k * 4, 20)
         )
@@ -237,6 +250,7 @@ def rank(
         content = str(metadata.get("content") or "")
         vector_score = float(item.get("score") or 0.0)
         keyword_score = _keyword_score(query, content)
+        # 混合语义分与关键词分，提升语义召回下的可解释性。
         final_score = vector_score * vector_weight + keyword_score * keyword_weight
         ranked.append(
             {
@@ -256,6 +270,7 @@ def rank(
 def merge_snippets(items: list[dict[str, Any]], max_chars: int = 3000) -> str:
     segments: list[str] = []
     total = 0
+    # 按排序结果顺序拼接，严格控制上下文长度以适配下游模型输入。
     for item in items:
         content = str(item.get("content") or "").strip()
         if not content:
@@ -280,11 +295,13 @@ def create_rag_pipeline(
     document_store: DocumentStore | None = None,
     embedder: EmbeddingModel | None = None,
 ) -> dict[str, Callable[..., Any]]:
+    """创建包含入库、检索与统计能力的 pipeline。"""
     vs = vector_store or ChromaVectorStore()
     ds = document_store or SQLiteDocumentStore()
     emb = embedder or get_text_embedder()
     processor = DocumentProcessor(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
+    # 暴露 add/search/stats 三个闭包并复用同一组依赖。
     async def add_documents(file_paths: list[str]) -> int:
         chunks = load_and_chunk_texts(
             file_paths,
