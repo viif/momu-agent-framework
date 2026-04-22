@@ -4,6 +4,10 @@
 - 向量相似度检索进行快速初筛
 - 知识图谱进行实体关系推理
 - 混合检索策略优化结果质量
+
+- 写入时同时落图与向量索引
+- 检索时先向量召回，再用图信息补全
+- 概念/实体提取优先利用结构化元数据
 """
 
 from __future__ import annotations
@@ -114,6 +118,7 @@ class SemanticMemory(Memory):
         self, text: str, metadata: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         if metadata is not None:
+            # 元数据中若已提供实体，优先复用以减少重复抽取开销。
             metadata_entities = self._normalize_entities(
                 metadata.get("entities"), source="metadata"
             )
@@ -340,6 +345,7 @@ class SemanticMemory(Memory):
             score_threshold = kwargs.get("score_threshold")
             start_time, end_time = self._resolve_time_bounds(kwargs)
 
+            # 查询阶段先做概念抽取，用于图回退与图加权。
             query_concepts = self._extract_concepts(query)
             seen_ids: set[str] = set()
             ranked_items: list[tuple[float, MemoryItem]] = []
@@ -513,6 +519,7 @@ class SemanticMemory(Memory):
             )
 
             # 2) 先删旧图和旧向量，再重建新版本。
+            # 为避免图索引残留，更新采用“删除旧版本后重建”的策略。
             graph_deleted = await self._delete_memory_graph(memory_id)
             if not graph_deleted:
                 return False

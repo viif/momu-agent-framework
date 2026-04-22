@@ -4,6 +4,10 @@
 - 时间序列组织
 - 上下文丰富的记忆
 - 模式识别能力
+
+- 文档存储作为权威数据源
+- 向量索引用于召回与相关性增强
+- 召回不足时回退到结构化检索补全结果
 """
 
 from __future__ import annotations
@@ -109,7 +113,7 @@ class EpisodicMemory(Memory):
                     where["session_id"] = session_id
 
                 try:
-                    # 优先向量召回，扩大候选集后再进行本地重排。
+                    # 向量召回用于扩展候选，最终结果仍以统一打分重排。
                     vector_hits = await self.vector_store.search_similar(
                         query_vector=query_vector,
                         limit=max(limit * 4, 20),
@@ -119,6 +123,7 @@ class EpisodicMemory(Memory):
                 except Exception as e:
                     self.logger.warning(f"🧠 向量检索失败，回退文档检索: {e}")
 
+            # 统一在文档记录层完成过滤，向量结果仅作为候选来源。
             for hit in vector_hits:
                 metadata = hit.get("metadata") or {}
                 memory_id = str(metadata.get("memory_id") or "")

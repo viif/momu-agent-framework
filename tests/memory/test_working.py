@@ -125,7 +125,6 @@ async def test_remove_and_clear_update_internal_state(working_memory):
     await working_memory.clear()
 
     assert await working_memory.get_all() == []
-    assert working_memory.memory_heap == []
     assert working_memory.current_tokens == 0
 
 

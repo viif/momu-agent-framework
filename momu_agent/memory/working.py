@@ -4,11 +4,14 @@
 - 容量和时间限制
 - 优先级管理
 - 自动清理机制
+
+- 写入前做 TTL 清理
+- 用“相关性 × 时间衰减 × 重要性”进行检索排序
+- 超限时按最低优先级淘汰
 """
 
 from __future__ import annotations
 
-import heapq
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -37,8 +40,6 @@ class WorkingMemory(Memory):
         self.session_start = datetime.now()
 
         self.memories: list[MemoryItem] = []
-        # 堆只保存当前记忆的优先级快照；更新后会整体重建，避免维护复杂的 decrease-key。
-        self.memory_heap: list[tuple[float, datetime, MemoryItem]] = []
 
         self.logger = get_logger(__name__)
         self.logger.debug(
@@ -51,12 +52,8 @@ class WorkingMemory(Memory):
         try:
             # 写入前先清理过期项，避免过期数据参与容量和 token 计算。
             self._expire_old_memories()
-            priority = self._calculate_priority(memory_item)
 
-            heapq.heappush(
-                self.memory_heap, (-priority, memory_item.timestamp, memory_item)
-            )
-            # 列表用于遍历/筛选，堆用于优先级排序；两者需保持同步。
+            # 列表用于遍历/筛选，优先级在需要时实时计算。
             self.memories.append(memory_item)
 
             # 这里用词数近似 token，和容量控制保持一致。
@@ -188,8 +185,7 @@ class WorkingMemory(Memory):
             if metadata is not None:
                 memory.metadata.update(metadata)
 
-            # 内容/重要性变化都会影响排序，需刷新堆并重新校验容量限制。
-            self._update_heap_priority()
+            # 内容/重要性变化后重新校验容量限制。
             await self._enforce_capacity_limits()
             self.logger.debug(f"🧠 更新工作记忆 [{memory_id}] 成功")
             return True
@@ -206,8 +202,6 @@ class WorkingMemory(Memory):
             removed_memory = self.memories.pop(index)
             self.current_tokens -= len(removed_memory.content.split())
             self.current_tokens = max(0, self.current_tokens)
-            # 删除后重建堆，避免残留条目影响后续优先级淘汰。
-            self._update_heap_priority()
             self.logger.debug(
                 f"🧠 删除工作记忆 [{memory_id}]，剩余: {len(self.memories)} 条"
             )
@@ -223,7 +217,6 @@ class WorkingMemory(Memory):
         """清空所有工作记忆。"""
         count = len(self.memories)
         self.memories.clear()
-        self.memory_heap.clear()
         self.current_tokens = 0
         self.logger.info(f"🧠 清空工作记忆，共移除 {count} 条")
 
@@ -413,11 +406,6 @@ class WorkingMemory(Memory):
         )
         self.memories = kept
         self.current_tokens = max(0, self.current_tokens - removed_token_sum)
-        # 清理后直接重建堆，保证后续容量淘汰仍按最新优先级判断。
-        self.memory_heap = []
-        for memory in self.memories:
-            priority = self._calculate_priority(memory)
-            heapq.heappush(self.memory_heap, (-priority, memory.timestamp, memory))
 
     async def _remove_lowest_priority_memory(self) -> None:
         """删除优先级最低的记忆。"""
@@ -427,11 +415,3 @@ class WorkingMemory(Memory):
         # 实时重算最小优先级，避免依赖可能滞后的堆快照。
         lowest_memory = min(self.memories, key=self._calculate_priority)
         await self.remove(lowest_memory.id)
-
-    def _update_heap_priority(self) -> None:
-        """更新堆中记忆的优先级。"""
-        # 堆不做增量调整，统一重建以保证实现简单且状态一致。
-        self.memory_heap = []
-        for item in self.memories:
-            priority = self._calculate_priority(item)
-            heapq.heappush(self.memory_heap, (-priority, item.timestamp, item))
