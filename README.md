@@ -106,8 +106,8 @@ uv run python examples/simple_agent_demo.py
 uv run python examples/react_agent_demo.py
 uv run python examples/plan_solve_agent_demo.py
 uv run python examples/reflection_agent_demo.py
-uv run python examples/rag_tool_demo.py
 uv run python examples/memory_tool_demo.py
+uv run python examples/rag_tool_demo.py
 ```
 
 ## 📂 目录结构
