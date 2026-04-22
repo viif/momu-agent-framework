@@ -46,6 +46,7 @@ class TestRAGTool:
             chunk_size=512,
             chunk_overlap=64,
             top_k=5,
+            llm=None,
         )
         pipeline["add_documents"].assert_awaited_once_with([str(file_path)])
 
@@ -155,6 +156,10 @@ class TestRAGTool:
             "python agent",
             limit=3,
             score_threshold=0.2,
+            enable_mqe=False,
+            mqe_expansions=2,
+            enable_hyde=False,
+            candidate_pool_multiplier=4,
         )
 
     @pytest.mark.asyncio

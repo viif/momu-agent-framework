@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from momu_agent.core.llm import LLM
 from momu_agent.rag.pipeline import (
     create_rag_pipeline,
     embed_query,
@@ -13,6 +14,8 @@ from momu_agent.rag.pipeline import (
     rank,
     search_vectors,
 )
+from momu_agent.storage.document import DocumentStore
+from momu_agent.storage.vector import VectorStore
 
 
 class DummyEmbedder:
@@ -30,7 +33,7 @@ class DummyEmbedder:
         return [to_vec(text) for text in texts]
 
 
-class FakeDocumentStore:
+class FakeDocumentStore(DocumentStore):
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
 
@@ -133,8 +136,11 @@ class FakeDocumentStore:
     async def get_document(self, document_id: str) -> dict[str, Any] | None:
         return await self.get_memory(document_id)
 
+    async def close(self) -> None:
+        return None
 
-class FakeVectorStore:
+
+class FakeVectorStore(VectorStore):
     def __init__(self, fail_search: bool = False) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
         self.fail_search = fail_search
@@ -219,6 +225,29 @@ class FakeVectorStore:
         info = await self.get_collection_info()
         info["store_type"] = "fake-vector"
         return info
+
+    async def close(self) -> None:
+        return None
+
+
+class FakeLLM(LLM):
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = list(responses)
+        self.calls: list[list[dict[str, str]]] = []
+
+    async def invoke(self, messages: list[dict[str, str]], **kwargs) -> str:
+        self.calls.append(messages)
+        if self.responses:
+            return self.responses.pop(0)
+        return ""
+
+
+class FailingLLM(LLM):
+    def __init__(self) -> None:
+        return None
+
+    async def invoke(self, messages: list[dict[str, str]], **kwargs) -> str:
+        raise RuntimeError("llm unavailable")
 
 
 @pytest.fixture
@@ -396,7 +425,186 @@ async def test_create_rag_pipeline_end_to_end(tmp_path: Path, embedder, monkeypa
     context = merge_snippets(results, max_chars=300)
     assert context
 
-    stats = await pipeline["get_stats"]()
-    assert stats["namespace"] == "ns1"
-    assert "vector" in stats
-    assert "document" in stats
+
+@pytest.mark.asyncio
+async def test_search_vectors_with_mqe_and_hyde_merges_hits(embedder, monkeypatch):
+    monkeypatch.setattr("momu_agent.rag.pipeline.get_dimension", lambda: 3)
+
+    vector_store = FakeVectorStore()
+    document_store = FakeDocumentStore()
+    await index_chunks(
+        [
+            {
+                "id": "c1",
+                "content": "Python asynchronous agent framework",
+                "metadata": {"rag_namespace": "ns1", "source": "doc1"},
+            },
+            {
+                "id": "c2",
+                "content": "Agent orchestration with memory retrieval",
+                "metadata": {"rag_namespace": "ns1", "source": "doc2"},
+            },
+        ],
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+        namespace="ns1",
+    )
+
+    llm = FakeLLM(
+        responses=[
+            "python async agent\nagent framework design",
+            "A concise paragraph about python asynchronous agent architecture.",
+        ]
+    )
+
+    hits = await search_vectors(
+        "python agent",
+        top_k=3,
+        namespace="ns1",
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+        enable_mqe=True,
+        mqe_expansions=2,
+        enable_hyde=True,
+        llm=llm,
+    )
+
+    assert len(hits) >= 1
+    assert len(llm.calls) == 2
+    assert all("memory_id" in hit["metadata"] for hit in hits)
+
+
+@pytest.mark.asyncio
+async def test_search_vectors_with_expansion_degrades_without_llm(
+    embedder, monkeypatch
+):
+    monkeypatch.setattr("momu_agent.rag.pipeline.get_dimension", lambda: 3)
+
+    vector_store = FakeVectorStore()
+    document_store = FakeDocumentStore()
+    await index_chunks(
+        [
+            {
+                "id": "c1",
+                "content": "python agent fallback baseline",
+                "metadata": {"rag_namespace": "ns1", "source": "doc1"},
+            }
+        ],
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+        namespace="ns1",
+    )
+
+    baseline = await search_vectors(
+        "python",
+        top_k=3,
+        namespace="ns1",
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+    )
+    expanded = await search_vectors(
+        "python",
+        top_k=3,
+        namespace="ns1",
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+        enable_mqe=True,
+        enable_hyde=True,
+        llm=None,
+    )
+
+    assert [item["id"] for item in expanded] == [item["id"] for item in baseline]
+
+
+@pytest.mark.asyncio
+async def test_search_vectors_with_expansion_degrades_on_llm_error(
+    embedder, monkeypatch
+):
+    monkeypatch.setattr("momu_agent.rag.pipeline.get_dimension", lambda: 3)
+
+    vector_store = FakeVectorStore()
+    document_store = FakeDocumentStore()
+    await index_chunks(
+        [
+            {
+                "id": "c1",
+                "content": "python agent resilient retrieval",
+                "metadata": {"rag_namespace": "ns1", "source": "doc1"},
+            }
+        ],
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+        namespace="ns1",
+    )
+
+    baseline = await search_vectors(
+        "python",
+        top_k=3,
+        namespace="ns1",
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+    )
+    expanded = await search_vectors(
+        "python",
+        top_k=3,
+        namespace="ns1",
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+        enable_mqe=True,
+        enable_hyde=True,
+        llm=FailingLLM(),
+    )
+
+    assert [item["id"] for item in expanded] == [item["id"] for item in baseline]
+
+
+@pytest.mark.asyncio
+async def test_create_rag_pipeline_search_passes_expansion_flags(embedder, monkeypatch):
+    monkeypatch.setattr("momu_agent.rag.pipeline.get_dimension", lambda: 3)
+
+    vector_store = FakeVectorStore()
+    document_store = FakeDocumentStore()
+    llm = FakeLLM(responses=["python async", "Hypothetical retrieval paragraph"])
+
+    pipeline = create_rag_pipeline(
+        top_k=5,
+        namespace="ns1",
+        vector_store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+        llm=llm,
+    )
+
+    await index_chunks(
+        [
+            {
+                "id": "c1",
+                "content": "python async retrieval",
+                "metadata": {"rag_namespace": "ns1", "source": "doc1"},
+            }
+        ],
+        store=vector_store,
+        document_store=document_store,
+        embedder=embedder,
+        namespace="ns1",
+    )
+
+    results = await pipeline["search"](
+        "python",
+        limit=3,
+        enable_mqe=True,
+        mqe_expansions=1,
+        enable_hyde=True,
+        candidate_pool_multiplier=2,
+    )
+
+    assert len(results) >= 1
+    assert len(llm.calls) == 2

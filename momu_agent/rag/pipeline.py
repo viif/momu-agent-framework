@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..core.llm import LLM
 from ..storage.document import DocumentStore, SQLiteDocumentStore
 from ..storage.vector import ChromaVectorStore, VectorStore
 from ..utils.embedding import EmbeddingModel, get_dimension, get_text_embedder
@@ -167,21 +169,117 @@ def embed_query(
     return _normalize_vector(vector, dim)
 
 
-async def search_vectors(
+# MQE：通过提示词让 LLM 生成多个语义相关但表达不同的查询。
+def _build_mqe_messages(query: str, n: int) -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是检索改写助手。请生成语义相关但表达不同的查询，"
+                "提升向量检索的召回率。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"原始问题：{query}\n"
+                f"请给出 {n} 条不同改写，每行一条，不要编号，不要解释。"
+            ),
+        },
+    ]
+
+
+async def _prompt_mqe(query: str, n: int, llm: LLM | None = None) -> list[str]:
+    # 扩展能力是可选增强：LLM 不可用时直接降级为不扩展。
+    if llm is None or not query.strip() or n <= 0:
+        return []
+
+    try:
+        content = await llm.invoke(_build_mqe_messages(query, n))
+    except Exception:
+        # 生成失败不影响主检索链路，调用方会回退到原始 query。
+        return []
+
+    queries: list[str] = []
+    for line in content.splitlines():
+        # 兼容常见模型输出格式（项目符号、数字编号）并抽取纯查询文本。
+        candidate = line.strip().lstrip("-*• ").strip()
+        if not candidate:
+            continue
+        dot_parts = candidate.split(".", 1)
+        if len(dot_parts) == 2 and dot_parts[0].strip().isdigit():
+            candidate = dot_parts[1].strip()
+        comma_parts = candidate.split("、", 1)
+        if len(comma_parts) == 2 and comma_parts[0].strip().isdigit():
+            candidate = comma_parts[1].strip()
+        if candidate:
+            queries.append(candidate)
+
+    # 去重后截断，稳定控制扩展查询数量上限。
+    return _dedupe_queries(queries)[:n]
+
+
+# HyDE：先生成“假设答案段落”，再把该段落当作检索查询以补足语义线索。
+def _build_hyde_messages(query: str) -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是检索增强助手。请根据问题生成一段客观、简洁、"
+                "信息密度高的假设文档，用于向量检索。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"问题：{query}\n请直接输出一段假设文档内容，不要分点，不要解释。"
+            ),
+        },
+    ]
+
+
+async def _prompt_hyde(query: str, llm: LLM | None = None) -> str | None:
+    # 与 MQE 一样，HyDE 失败只关闭增强，不中断主路径。
+    if llm is None or not query.strip():
+        return None
+
+    try:
+        content = await llm.invoke(_build_hyde_messages(query))
+    except Exception:
+        return None
+
+    candidate = content.strip()
+    return candidate or None
+
+
+def _dedupe_queries(queries: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+
+    for query in queries:
+        normalized = query.strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(normalized)
+
+    return result
+
+
+async def _search_single_query(
     query: str,
     *,
-    top_k: int = 8,
-    score_threshold: float | None = None,
-    namespace: str = "default",
-    store: VectorStore | None = None,
-    document_store: DocumentStore | None = None,
-    embedder: EmbeddingModel | None = None,
-    where: dict[str, Any] | None = None,
+    top_k: int,
+    score_threshold: float | None,
+    namespace: str,
+    vector_store: VectorStore,
+    doc_store: DocumentStore,
+    embedder: EmbeddingModel | None,
+    where: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """执行向量检索并在异常时回退关键词检索。"""
-    vector_store = store or ChromaVectorStore()
-    doc_store = document_store or SQLiteDocumentStore()
-
     query_vector = embed_query(query, embedder=embedder)
     # 默认按 memory_type + namespace 约束检索范围，避免跨场景污染结果。
     conditions: dict[str, Any] = {
@@ -226,6 +324,136 @@ async def search_vectors(
             )
         results.sort(key=lambda x: float(x.get("score") or 0.0), reverse=True)
         return results[:top_k]
+
+
+def _merge_hits_by_memory_id(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # 多查询命中同一片段时按 memory_id 去重，并保留最高语义分。
+    merged: dict[str, dict[str, Any]] = {}
+
+    for item in items:
+        metadata = dict(item.get("metadata") or {})
+        memory_id = str(metadata.get("memory_id") or item.get("id") or "")
+        if not memory_id:
+            memory_id = hashlib.md5(str(item).encode("utf-8")).hexdigest()
+
+        current = merged.get(memory_id)
+        if current is None or float(item.get("score") or 0.0) > float(
+            current.get("score") or 0.0
+        ):
+            updated = {
+                **item,
+                "metadata": {**metadata, "memory_id": memory_id},
+            }
+            merged[memory_id] = updated
+
+    results = list(merged.values())
+    results.sort(key=lambda x: float(x.get("score") or 0.0), reverse=True)
+    return results
+
+
+async def search_vectors(
+    query: str,
+    *,
+    top_k: int = 8,
+    score_threshold: float | None = None,
+    namespace: str = "default",
+    store: VectorStore | None = None,
+    document_store: DocumentStore | None = None,
+    embedder: EmbeddingModel | None = None,
+    where: dict[str, Any] | None = None,
+    enable_mqe: bool = False,
+    mqe_expansions: int = 2,
+    enable_hyde: bool = False,
+    candidate_pool_multiplier: int = 4,
+    llm: LLM | None = None,
+) -> list[dict[str, Any]]:
+    """执行检索，支持 MQE/HyDE 扩展并在异常时回退关键词检索。"""
+    normalized_query = query.strip()
+    if not normalized_query:
+        return []
+
+    vector_store = store or ChromaVectorStore()
+    doc_store = document_store or SQLiteDocumentStore()
+
+    # 兼容默认行为：不开启扩展时完全复用原单查询路径。
+    should_expand = (enable_mqe and mqe_expansions > 0) or enable_hyde
+    if not should_expand:
+        return await _search_single_query(
+            normalized_query,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            namespace=namespace,
+            vector_store=vector_store,
+            doc_store=doc_store,
+            embedder=embedder,
+            where=where,
+        )
+
+    # 组合扩展框架：原始 query + MQE 改写 + HyDE 伪文档。
+    expanded_queries = [normalized_query]
+    if enable_mqe and mqe_expansions > 0:
+        expanded_queries.extend(
+            await _prompt_mqe(normalized_query, n=mqe_expansions, llm=llm)
+        )
+    if enable_hyde:
+        hyde_text = await _prompt_hyde(normalized_query, llm=llm)
+        if hyde_text:
+            expanded_queries.append(hyde_text)
+
+    # 扩展结果为空时自动退化，保证行为稳定可预期。
+    deduped_queries = _dedupe_queries(expanded_queries)
+    if len(deduped_queries) <= 1:
+        return await _search_single_query(
+            normalized_query,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            namespace=namespace,
+            vector_store=vector_store,
+            doc_store=doc_store,
+            embedder=embedder,
+            where=where,
+        )
+
+    # 用候选池控制多路召回规模，再按查询数均分每路检索额度。
+    pool_size = max(top_k * max(1, candidate_pool_multiplier), 20)
+    per_query_k = max(1, pool_size // len(deduped_queries))
+
+    tasks = [
+        _search_single_query(
+            expanded_query,
+            top_k=per_query_k,
+            score_threshold=score_threshold,
+            namespace=namespace,
+            vector_store=vector_store,
+            doc_store=doc_store,
+            embedder=embedder,
+            where=where,
+        )
+        for expanded_query in deduped_queries
+    ]
+    settled = await asyncio.gather(*tasks, return_exceptions=True)
+
+    merged_inputs: list[dict[str, Any]] = []
+    for item in settled:
+        if isinstance(item, BaseException):
+            continue
+        merged_inputs.extend(item)
+
+    # 当所有扩展路由都不可用时，回退到原始 query 的单路检索。
+    if not merged_inputs:
+        return await _search_single_query(
+            normalized_query,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            namespace=namespace,
+            vector_store=vector_store,
+            doc_store=doc_store,
+            embedder=embedder,
+            where=where,
+        )
+
+    merged = _merge_hits_by_memory_id(merged_inputs)
+    return merged[:top_k]
 
 
 def _keyword_score(query: str, content: str) -> float:
@@ -294,6 +522,7 @@ def create_rag_pipeline(
     vector_store: VectorStore | None = None,
     document_store: DocumentStore | None = None,
     embedder: EmbeddingModel | None = None,
+    llm: LLM | None = None,
 ) -> dict[str, Callable[..., Any]]:
     """创建包含入库、检索与统计能力的 pipeline。"""
     vs = vector_store or ChromaVectorStore()
@@ -323,6 +552,10 @@ def create_rag_pipeline(
         *,
         limit: int | None = None,
         score_threshold: float | None = None,
+        enable_mqe: bool = False,
+        mqe_expansions: int = 2,
+        enable_hyde: bool = False,
+        candidate_pool_multiplier: int = 4,
     ) -> list[dict[str, Any]]:
         hits = await search_vectors(
             query,
@@ -332,6 +565,11 @@ def create_rag_pipeline(
             store=vs,
             document_store=ds,
             embedder=emb,
+            enable_mqe=enable_mqe,
+            mqe_expansions=mqe_expansions,
+            enable_hyde=enable_hyde,
+            candidate_pool_multiplier=candidate_pool_multiplier,
+            llm=llm,
         )
         return rank(hits, query)
 

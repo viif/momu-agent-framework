@@ -28,7 +28,11 @@ class RAGTool(Tool):
     ):
         super().__init__(
             name="rag",
-            description="基于本地知识库的 RAG 工具，支持文档入库、检索、问答和统计。",
+            description=(
+                "基于本地知识库的 RAG 工具，支持文档入库、检索、问答和统计。"
+                "检索策略遵循“由简入繁”原则：默认优先使用基础检索；"
+                "仅在基础检索结果不足或查询复杂模糊时，再尝试启用多查询扩展（MQE）或假设文档嵌入（HyDE）策略。"
+            ),
         )
         self.logger = get_logger(__name__)
         self.namespace = namespace
@@ -37,7 +41,7 @@ class RAGTool(Tool):
         self.top_k = top_k
         self.max_chars = max_chars
         self._llm = llm
-        self._pipeline_cache: dict[tuple[str, int, int, int], dict[str, Any]] = {}
+        self._pipeline_cache: dict[tuple[str, int, int, int, bool], dict[str, Any]] = {}
 
     async def run(self, parameters: dict[str, Any]) -> str:
         """根据 action 分发并执行对应 RAG 操作。"""
@@ -121,6 +125,34 @@ class RAGTool(Tool):
                 description="最小相似度阈值",
                 required=False,
                 default=None,
+            ),
+            ToolParameter(
+                name="enable_mqe",
+                type="boolean",
+                description="是否启用多查询扩展（MQE）",
+                required=False,
+                default=False,
+            ),
+            ToolParameter(
+                name="mqe_expansions",
+                type="integer",
+                description="MQE 生成改写查询数量",
+                required=False,
+                default=2,
+            ),
+            ToolParameter(
+                name="enable_hyde",
+                type="boolean",
+                description="是否启用假设文档嵌入（HyDE）",
+                required=False,
+                default=False,
+            ),
+            ToolParameter(
+                name="candidate_pool_multiplier",
+                type="integer",
+                description="扩展检索候选池倍率",
+                required=False,
+                default=4,
             ),
             ToolParameter(
                 name="chunk_size",
@@ -246,6 +278,18 @@ class RAGTool(Tool):
         score_threshold = self._get_optional_float(
             parameters.get("score_threshold"), "score_threshold"
         )
+        enable_mqe = self._get_bool(parameters.get("enable_mqe"), False, "enable_mqe")
+        mqe_expansions = self._get_positive_int(
+            parameters.get("mqe_expansions"), 2, "mqe_expansions"
+        )
+        enable_hyde = self._get_bool(
+            parameters.get("enable_hyde"), False, "enable_hyde"
+        )
+        candidate_pool_multiplier = self._get_positive_int(
+            parameters.get("candidate_pool_multiplier"),
+            4,
+            "candidate_pool_multiplier",
+        )
         pipeline = self._create_pipeline(namespace=namespace, top_k=limit)
 
         try:
@@ -253,6 +297,10 @@ class RAGTool(Tool):
                 query,
                 limit=limit,
                 score_threshold=score_threshold,
+                enable_mqe=enable_mqe,
+                mqe_expansions=mqe_expansions,
+                enable_hyde=enable_hyde,
+                candidate_pool_multiplier=candidate_pool_multiplier,
             )
         except Exception as e:
             raise ToolException(f"搜索失败: {e}") from e
@@ -274,6 +322,18 @@ class RAGTool(Tool):
         score_threshold = self._get_optional_float(
             parameters.get("score_threshold"), "score_threshold"
         )
+        enable_mqe = self._get_bool(parameters.get("enable_mqe"), False, "enable_mqe")
+        mqe_expansions = self._get_positive_int(
+            parameters.get("mqe_expansions"), 2, "mqe_expansions"
+        )
+        enable_hyde = self._get_bool(
+            parameters.get("enable_hyde"), False, "enable_hyde"
+        )
+        candidate_pool_multiplier = self._get_positive_int(
+            parameters.get("candidate_pool_multiplier"),
+            4,
+            "candidate_pool_multiplier",
+        )
         pipeline = self._create_pipeline(namespace=namespace, top_k=limit)
 
         try:
@@ -281,6 +341,10 @@ class RAGTool(Tool):
                 question,
                 limit=limit,
                 score_threshold=score_threshold,
+                enable_mqe=enable_mqe,
+                mqe_expansions=mqe_expansions,
+                enable_hyde=enable_hyde,
+                candidate_pool_multiplier=candidate_pool_multiplier,
             )
         except Exception as e:
             raise ToolException(f"问答检索失败: {e}") from e
@@ -349,6 +413,7 @@ class RAGTool(Tool):
             resolved_chunk_size,
             resolved_chunk_overlap,
             resolved_top_k,
+            self._llm is not None,
         )
         if cache_key in self._pipeline_cache:
             return self._pipeline_cache[cache_key]
@@ -358,6 +423,7 @@ class RAGTool(Tool):
             chunk_size=resolved_chunk_size,
             chunk_overlap=resolved_chunk_overlap,
             top_k=resolved_top_k,
+            llm=self._llm,
         )
         self._pipeline_cache[cache_key] = pipeline
         return pipeline
@@ -476,6 +542,19 @@ class RAGTool(Tool):
     def _get_query(self, parameters: dict[str, Any]) -> str:
         query = parameters.get("query") or parameters.get("question") or ""
         return str(query).strip()
+
+    def _get_bool(self, value: Any, default: bool, name: str) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "off"}:
+                return False
+        raise ToolException(f"{name} 必须是布尔值")
 
     def _get_positive_int(self, value: Any, default: int, name: str) -> int:
         if value is None:
