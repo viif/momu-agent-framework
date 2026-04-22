@@ -1,5 +1,3 @@
-from typing import Any, Dict, List
-
 import pytest
 
 from momu_agent.tools.base import Tool, ToolParameter
@@ -11,10 +9,10 @@ class MockTool(Tool):
     def __init__(self):
         super().__init__(name="mock_tool", description="这是一个用于测试的工具")
 
-    async def run(self, parameters: Dict[str, Any]) -> str:
+    async def run(self, parameters: dict[str, object]) -> str:
         return f"MockTool executed with: {parameters}"
 
-    def get_parameters(self) -> List[ToolParameter]:
+    def get_parameters(self) -> list[ToolParameter]:
         return [
             ToolParameter(
                 name="query", type="string", description="搜索关键词", required=True
@@ -55,6 +53,10 @@ class TestTool:
 
     def test_validate_parameters_empty(self, mock_tool):
         assert mock_tool.validate_parameters({}) is False
+
+    @pytest.mark.asyncio
+    async def test_close_default_noop(self, mock_tool):
+        assert await mock_tool.close() is None
 
     def test_to_dict(self, mock_tool):
         result = mock_tool.to_dict()

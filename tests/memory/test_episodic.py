@@ -131,6 +131,9 @@ class FakeDocumentStore(DocumentStore):
     async def get_document(self, document_id: str) -> dict[str, Any] | None:
         return await self.get_memory(document_id)
 
+    async def close(self) -> None:
+        return None
+
 
 class FakeVectorStore(VectorStore):
     def __init__(self, fail_search: bool = False) -> None:
@@ -216,6 +219,9 @@ class FakeVectorStore(VectorStore):
             "store_type": "fake-vector",
             "vectors_count": len(self.points),
         }
+
+    async def close(self) -> None:
+        return None
 
 
 def make_item(

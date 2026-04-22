@@ -778,6 +778,18 @@ class SemanticMemory(Memory):
             limit=10000,
         )
 
+    async def close(self) -> None:
+        """释放语义记忆依赖的存储资源。"""
+        try:
+            await self.graph_store.close()
+        except Exception as e:
+            self.logger.warning(f"🧠 关闭语义记忆图存储失败: {e}")
+
+        try:
+            await self.vector_store.close()
+        except Exception as e:
+            self.logger.warning(f"🧠 关闭语义记忆向量存储失败: {e}")
+
     def _memory_entity_id(self, memory_id: str) -> str:
         return f"semantic:memory:{memory_id}"
 

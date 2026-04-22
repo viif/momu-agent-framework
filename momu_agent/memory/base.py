@@ -96,6 +96,10 @@ class Memory(ABC):
     async def get_stats(self) -> dict[str, Any]:
         """获取记忆统计信息。"""
 
+    async def close(self) -> None:
+        """释放记忆后端资源。"""
+        return None
+
     def _generate_id(self) -> str:
         """生成记忆 ID。"""
         return str(uuid4())

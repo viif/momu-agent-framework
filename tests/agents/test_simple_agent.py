@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from momu_agent.agents.simple_agent import SimpleAgent
+from momu_agent.core.exceptions import AgentException
 from momu_agent.tools.base import ToolParameter
 from momu_agent.tools.registry import ToolRegistry
 
@@ -257,3 +258,32 @@ def test_agent_custom_system_prompt(mock_llm, mock_registry):
     assert "你是专业气象顾问。" in prompt
     assert "search: 搜索工具" in prompt
     assert "### 工具调用协议 ###" in prompt
+
+
+@pytest.mark.asyncio
+async def test_agent_close_called_on_success(mock_llm):
+    mock_llm.invoke.return_value = "ok"
+    mock_registry = Mock(spec=ToolRegistry)
+    mock_registry.get_tools_description = Mock(return_value="暂无可用工具")
+    mock_registry.close = AsyncMock(return_value=None)
+
+    agent = SimpleAgent(name="TestAgent", llm=mock_llm, tool_registry=mock_registry)
+    result = await agent.run("hello")
+
+    assert result == "ok"
+    mock_registry.close.assert_awaited_once_with()
+
+
+@patch("momu_agent.agents.simple_agent.run_parallel_tools")
+@pytest.mark.asyncio
+async def test_agent_close_called_on_failure(
+    _mock_run_parallel, mock_llm, mock_registry
+):
+    mock_llm.invoke.side_effect = RuntimeError("llm crashed")
+    mock_registry.close = AsyncMock(return_value=None)
+    agent = SimpleAgent(name="TestAgent", llm=mock_llm, tool_registry=mock_registry)
+
+    with pytest.raises(AgentException, match="llm crashed"):
+        await agent.run("query")
+
+    mock_registry.close.assert_awaited_once_with()

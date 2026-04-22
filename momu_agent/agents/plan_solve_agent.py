@@ -276,6 +276,11 @@ class PlanSolveAgent(Agent):
             self.llm, executor_prompt, tool_registry, max_tool_iterations
         )
 
+    async def close(self) -> None:
+        """释放 Agent 关联的工具资源。"""
+        if self.tool_registry is not None:
+            await self.tool_registry.close()
+
     async def run(self, input_text: str, **kwargs) -> str:
         """
         运行 Plan and Solve Agent
@@ -304,3 +309,5 @@ class PlanSolveAgent(Agent):
             self.logger.error(error_msg)
             self.add_message(Message(error_msg, "assistant"))
             return error_msg
+        finally:
+            await self._safe_close()

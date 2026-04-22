@@ -37,6 +37,7 @@ class RAGTool(Tool):
         self.top_k = top_k
         self.max_chars = max_chars
         self._llm = llm
+        self._pipeline_cache: dict[tuple[str, int, int, int], dict[str, Any]] = {}
 
     async def run(self, parameters: dict[str, Any]) -> str:
         """根据 action 分发并执行对应 RAG 操作。"""
@@ -316,6 +317,19 @@ class RAGTool(Tool):
 
         return self._format_stats(stats)
 
+    async def close(self) -> None:
+        """关闭当前工具已创建的所有 RAG pipeline 资源。"""
+        for key, pipeline in list(self._pipeline_cache.items()):
+            close_fn = pipeline.get("close")
+            if close_fn is None:
+                continue
+            try:
+                result = close_fn()
+                if hasattr(result, "__await__"):
+                    await result
+            except Exception as e:
+                self.logger.warning(f"关闭 RAG pipeline {key} 失败: {e}")
+
     def _create_pipeline(
         self,
         *,
@@ -325,14 +339,28 @@ class RAGTool(Tool):
         top_k: int | None = None,
     ) -> dict[str, Any]:
         """创建带默认参数的 RAG pipeline。"""
-        return create_rag_pipeline(
-            namespace=namespace,
-            chunk_size=chunk_size or self.chunk_size,
-            chunk_overlap=chunk_overlap
-            if chunk_overlap is not None
-            else self.chunk_overlap,
-            top_k=top_k or self.top_k,
+        resolved_chunk_size = chunk_size or self.chunk_size
+        resolved_chunk_overlap = (
+            chunk_overlap if chunk_overlap is not None else self.chunk_overlap
         )
+        resolved_top_k = top_k or self.top_k
+        cache_key = (
+            namespace,
+            resolved_chunk_size,
+            resolved_chunk_overlap,
+            resolved_top_k,
+        )
+        if cache_key in self._pipeline_cache:
+            return self._pipeline_cache[cache_key]
+
+        pipeline = create_rag_pipeline(
+            namespace=namespace,
+            chunk_size=resolved_chunk_size,
+            chunk_overlap=resolved_chunk_overlap,
+            top_k=resolved_top_k,
+        )
+        self._pipeline_cache[cache_key] = pipeline
+        return pipeline
 
     def _get_llm(self) -> LLM:
         """获取或初始化 LLM 实例。"""

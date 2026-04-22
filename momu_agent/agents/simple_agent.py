@@ -132,6 +132,11 @@ class SimpleAgent(Agent):
             self.logger.error(error_msg)
             raise AgentException(error_msg) from e
 
+    async def close(self) -> None:
+        """释放 Agent 关联的工具资源。"""
+        if self.tool_registry is not None:
+            await self.tool_registry.close()
+
     async def run(self, input_text: str, max_tool_iterations: int = 3, **kwargs) -> str:
         """运行Agent，支持可选工具调用"""
         self.logger.info(f"🤖 {self.name} 正在处理: {input_text}")
@@ -149,15 +154,17 @@ class SimpleAgent(Agent):
                 response = await self.llm.invoke(messages, **kwargs)
                 self.add_message(Message(input_text, "user"))
                 self.add_message(Message(response, "assistant"))
+
+            self.logger.info("🤖 Agent 响应完成")
+            return response
         except AgentException:
             raise
         except Exception as e:
             error_msg = f"🤖 运行失败: {str(e)}"
             self.logger.error(error_msg)
             raise AgentException(error_msg) from e
-
-        self.logger.info("🤖 Agent 响应完成")
-        return response
+        finally:
+            await self._safe_close()
 
     async def stream_run(self, input_text: str, **kwargs) -> AsyncIterator[str]:
         """

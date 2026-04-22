@@ -44,6 +44,17 @@ class Agent(ABC):
         """运行Agent"""
         pass
 
+    async def close(self) -> None:
+        """释放 Agent 持有的资源。"""
+        return None
+
+    async def _safe_close(self) -> None:
+        """安全释放 Agent 资源，避免影响主流程返回。"""
+        try:
+            await self.close()
+        except Exception as e:
+            self.logger.exception(f"🤖 Agent '{self.name}' 关闭资源失败: {e}")
+
     def add_message(self, message: Message):
         """
         添加消息到历史记录

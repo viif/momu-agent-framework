@@ -251,6 +251,14 @@ class MemoryManager:
         for memory in self.memory_types.values():
             await memory.clear()
 
+    async def close(self) -> None:
+        """关闭所有已启用记忆后端。"""
+        for memory_type, memory in self.memory_types.items():
+            try:
+                await memory.close()
+            except Exception as e:
+                self.logger.warning(f"MemoryManager 关闭 {memory_type} 失败: {e}")
+
     def _classify_memory_type(
         self,
         content: str,

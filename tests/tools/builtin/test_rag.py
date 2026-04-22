@@ -279,6 +279,36 @@ class TestRAGTool:
                     {"action": "add_document", "file_path": str(file_path)}
                 )
 
+    @pytest.mark.asyncio
+    async def test_close_calls_all_cached_pipeline_close(self, rag_tool):
+        close_a = AsyncMock(return_value=None)
+        close_b = AsyncMock(return_value=None)
+        rag_tool._pipeline_cache = {
+            ("docs", 1000, 200, 5): {"close": close_a},
+            ("notes", 512, 64, 3): {"close": close_b},
+        }
+
+        await rag_tool.close()
+
+        close_a.assert_awaited_once_with()
+        close_b.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_close_continues_when_single_pipeline_close_fails(self, rag_tool):
+        bad_close = AsyncMock(side_effect=RuntimeError("boom"))
+        good_close = AsyncMock(return_value=None)
+        rag_tool._pipeline_cache = {
+            ("docs", 1000, 200, 5): {"close": bad_close},
+            ("notes", 1000, 200, 5): {"close": good_close},
+        }
+
+        with patch.object(rag_tool.logger, "warning") as mock_warning:
+            await rag_tool.close()
+
+        bad_close.assert_awaited_once_with()
+        good_close.assert_awaited_once_with()
+        mock_warning.assert_called_once()
+
 
 class TestRAGConvenienceFunctions:
     @pytest.mark.asyncio

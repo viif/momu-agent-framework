@@ -133,6 +133,11 @@ class ReflectionAgent(Agent):
         self.parser = ToolParser()
         self.memory = Memory()
 
+    async def close(self) -> None:
+        """释放 Agent 关联的工具资源。"""
+        if self.tool_registry is not None:
+            await self.tool_registry.close()
+
     async def run(self, input_text: str, **kwargs) -> str:
         """
         运行 ReflectionAgent
@@ -200,6 +205,8 @@ class ReflectionAgent(Agent):
             self.logger.error(error_msg)
             self.add_message(Message(error_msg, "assistant"))
             return error_msg
+        finally:
+            await self._safe_close()
 
     def _build_tool_system_prompt(self) -> str:
         """构建包含工具信息的系统提示词"""

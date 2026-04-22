@@ -63,6 +63,10 @@ class VectorStore(ABC):
     async def get_collection_stats(self) -> dict[str, Any]:
         """获取集合统计。"""
 
+    @abstractmethod
+    async def close(self) -> None:
+        """关闭向量存储连接并释放资源。"""
+
 
 class ChromaVectorStore(VectorStore):
     """Chroma 向量存储实现"""

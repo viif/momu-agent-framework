@@ -90,8 +90,7 @@ async def demo_rag_with_agent(config: Config) -> None:
         )
 
         question_add_doc = (
-            "请调用 rag 工具 add_document 导入文件："
-            f"{document_path.as_posix()}"
+            f"请调用 rag 工具 add_document 导入文件：{document_path.as_posix()}"
         )
         print(f"用户: {question_add_doc}")
         response = await agent.run(question_add_doc, max_tool_iterations=3)

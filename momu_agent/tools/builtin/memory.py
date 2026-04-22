@@ -314,6 +314,10 @@ class MemoryTool(Tool):
         await self.memory_manager.clear_all_memories()
         return "已清空所有记忆"
 
+    async def close(self) -> None:
+        """释放记忆管理器占用的后端资源。"""
+        await self.memory_manager.close()
+
     def _get_positive_int(self, value: Any, default: int, field_name: str) -> int:
         """解析正整数参数，不合法时抛出工具异常。"""
         if value is None:

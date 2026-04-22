@@ -37,6 +37,10 @@ class Tool(ABC):
         """获取工具参数定义"""
         pass
 
+    async def close(self) -> None:
+        """释放工具持有的资源。"""
+        return None
+
     def validate_parameters(self, parameters: dict[str, Any]) -> bool:
         """验证参数"""
         self.logger.debug(f"🔧 正在验证工具 [{self.name}] 的参数: {parameters}")

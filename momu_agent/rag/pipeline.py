@@ -344,8 +344,19 @@ def create_rag_pipeline(
             "document": doc_stats,
         }
 
+    async def close() -> None:
+        try:
+            await vs.close()
+        except Exception:
+            pass
+        try:
+            await ds.close()
+        except Exception:
+            pass
+
     return {
         "add_documents": add_documents,
         "search": search,
         "get_stats": get_stats,
+        "close": close,
     }

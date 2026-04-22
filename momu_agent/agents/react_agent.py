@@ -109,6 +109,11 @@ class ReActAgent(Agent):
             observations.append(obs)
         return "\n".join(observations)
 
+    async def close(self) -> None:
+        """释放 Agent 关联的工具资源。"""
+        if self.tool_registry is not None:
+            await self.tool_registry.close()
+
     async def run(self, input_text: str, **kwargs) -> str:
         """
         运行 ReAct Agent 主循环（Thought → Action → Observation）。
@@ -195,6 +200,8 @@ class ReActAgent(Agent):
             self.logger.error(error_msg)
             self.add_message(Message(error_msg, "assistant"))
             return error_msg
+        finally:
+            await self._safe_close()
 
     def _parse_output(self, text: str) -> tuple[str | None, str | None]:
         thought_match = re.search(

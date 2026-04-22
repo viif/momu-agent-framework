@@ -264,6 +264,9 @@ class FakeVectorStore(VectorStore):
     async def get_collection_stats(self) -> dict[str, Any]:
         return {"store_type": "fake-vector", "vectors_count": len(self.points)}
 
+    async def close(self) -> None:
+        return None
+
 
 def make_item(
     memory_id: str,

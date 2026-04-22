@@ -471,6 +471,18 @@ class EpisodicMemory(Memory):
 
         return forgotten
 
+    async def close(self) -> None:
+        """释放情景记忆依赖的存储资源。"""
+        try:
+            await self.document_store.close()
+        except Exception as e:
+            self.logger.warning(f"🧠 关闭情景记忆文档存储失败: {e}")
+
+        try:
+            await self.vector_store.close()
+        except Exception as e:
+            self.logger.warning(f"🧠 关闭情景记忆向量存储失败: {e}")
+
     def _vector_point_id(self, memory_id: str) -> str:
         return f"episodic:{memory_id}"
 

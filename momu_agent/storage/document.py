@@ -79,6 +79,10 @@ class DocumentStore(ABC):
     async def get_document(self, document_id: str) -> dict[str, Any] | None:
         """按 ID 获取文档记忆，不存在时返回 None。"""
 
+    @abstractmethod
+    async def close(self) -> None:
+        """关闭文档存储连接并释放资源。"""
+
 
 class SQLiteDocumentStore(DocumentStore):
     """SQLite 文档存储实现（基于 aiosqlite）"""

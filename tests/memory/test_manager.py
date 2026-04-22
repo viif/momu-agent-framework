@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -125,6 +126,9 @@ class FakeDocumentStore(DocumentStore):
     async def get_document(self, document_id: str) -> dict | None:
         return await self.get_memory(document_id)
 
+    async def close(self) -> None:
+        return None
+
 
 class FakeVectorStore(VectorStore):
     def __init__(self) -> None:
@@ -201,6 +205,9 @@ class FakeVectorStore(VectorStore):
 
     async def get_collection_stats(self) -> dict:
         return {"store_type": "fake-vector", "vectors_count": len(self.points)}
+
+    async def close(self) -> None:
+        return None
 
 
 class FakeGraphStore(GraphStore):
@@ -550,3 +557,37 @@ async def test_consolidate_memories_moves_high_importance_working_memories(
     assert moved == 1
     assert [memory.id for memory in episodic_results] == ["w1"]
     assert [memory.id for memory in working_results] == ["w2"]
+
+
+@pytest.mark.asyncio
+async def test_close_calls_all_memory_backends(manager: MemoryManager):
+    close_mocks: list[AsyncMock] = []
+    for backend in manager.memory_types.values():
+        close_mock = AsyncMock(return_value=None)
+        backend.close = close_mock
+        close_mocks.append(close_mock)
+
+    await manager.close()
+
+    for close_mock in close_mocks:
+        close_mock.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_close_continues_when_backend_fails(manager: MemoryManager):
+    backends = list(manager.memory_types.values())
+    close_mocks: list[AsyncMock] = []
+
+    failing_close = AsyncMock(side_effect=RuntimeError("boom"))
+    backends[0].close = failing_close
+    close_mocks.append(failing_close)
+
+    for backend in backends[1:]:
+        close_mock = AsyncMock(return_value=None)
+        backend.close = close_mock
+        close_mocks.append(close_mock)
+
+    await manager.close()
+
+    for close_mock in close_mocks:
+        close_mock.assert_awaited_once_with()

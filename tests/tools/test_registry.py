@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -183,6 +183,36 @@ class TestToolRegistry:
             ):
                 await registry.execute_tool("bad_func", "hello")
             mock_log.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_close_calls_all_tool_close(self, registry):
+        tool_a = MockTool(name="a")
+        tool_b = MockTool(name="b")
+        tool_a.close = AsyncMock(return_value=None)
+        tool_b.close = AsyncMock(return_value=None)
+        registry.register_tool(tool_a)
+        registry.register_tool(tool_b)
+
+        await registry.close()
+
+        tool_a.close.assert_awaited_once_with()
+        tool_b.close.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_close_continues_on_tool_error(self, registry):
+        tool_a = MockTool(name="a")
+        tool_b = MockTool(name="b")
+        tool_a.close = AsyncMock(side_effect=RuntimeError("boom"))
+        tool_b.close = AsyncMock(return_value=None)
+        registry.register_tool(tool_a)
+        registry.register_tool(tool_b)
+
+        with patch.object(registry.logger, "warning") as mock_warning:
+            await registry.close()
+
+        tool_a.close.assert_awaited_once_with()
+        tool_b.close.assert_awaited_once_with()
+        mock_warning.assert_called_once()
 
     def test_get_tools_description(self, registry):
         """测试获取工具描述字符串"""

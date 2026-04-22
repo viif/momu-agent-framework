@@ -167,6 +167,14 @@ class ToolRegistry:
         """获取所有Tool对象"""
         return list(self._tools.values())
 
+    async def close(self) -> None:
+        """关闭所有已注册 Tool 对象。"""
+        for name, tool in self._tools.items():
+            try:
+                await tool.close()
+            except Exception as e:
+                self.logger.warning(f"🔧 关闭工具 '{name}' 失败: {e}")
+
     def clear(self):
         """清空所有工具"""
         self._tools.clear()
