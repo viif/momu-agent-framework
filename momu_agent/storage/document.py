@@ -8,7 +8,6 @@ import asyncio
 import json
 import os
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -84,7 +83,7 @@ class DocumentStore(ABC):
 class SQLiteDocumentStore(DocumentStore):
     """SQLite 文档存储实现（基于 aiosqlite）"""
 
-    _DEFAULT_DB_PATH = str(Path(__file__).parent / "memory.db")
+    _DEFAULT_DB_PATH = os.path.join(os.getcwd(), ".storage", "document.db")
     _instances: dict[str, "SQLiteDocumentStore"] = {}
 
     def __new__(cls, db_path: str | None = None) -> "SQLiteDocumentStore":

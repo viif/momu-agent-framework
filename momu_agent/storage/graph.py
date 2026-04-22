@@ -5,7 +5,6 @@ import json
 import os
 import time
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Any
 
 import kuzu
@@ -80,7 +79,7 @@ class GraphStore(ABC):
 class KuzuGraphStore(GraphStore):
     """Kuzu 图数据库存储实现"""
 
-    _DEFAULT_DB_PATH = str(Path(__file__).parent / "graph.kuzu")
+    _DEFAULT_DB_PATH = os.path.join(os.getcwd(), ".storage", "graph.kuzu")
     _instances: dict[str, "KuzuGraphStore"] = {}
 
     def __new__(cls, db_path: str | None = None) -> "KuzuGraphStore":

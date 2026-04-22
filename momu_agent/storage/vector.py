@@ -8,7 +8,6 @@ import asyncio
 import os
 import time
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Any, Mapping, cast
 from uuid import uuid4
 
@@ -68,7 +67,7 @@ class VectorStore(ABC):
 class ChromaVectorStore(VectorStore):
     """Chroma 向量存储实现"""
 
-    _DEFAULT_PATH = str(Path(__file__).parent / "chroma_data")
+    _DEFAULT_PATH = os.path.join(os.getcwd(), ".storage", "chroma_data")
     _DEFAULT_COLLECTION = "memories"
     _instances: dict[tuple[str, str], "ChromaVectorStore"] = {}
 
