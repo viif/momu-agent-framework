@@ -13,6 +13,7 @@ from .builtin.rag import (
     rag_search,
 )
 from .builtin.search import SearchTool
+from .builtin.terminal import TerminalTool
 from .chain import ChainStep, ToolChain, ToolChainManager
 from .executor import ToolExecutor, run_batch_tool, run_parallel_tools
 from .registry import ToolRegistry
@@ -29,6 +30,7 @@ __all__ = [
     "RAGTool",
     "MemoryTool",
     "NoteTool",
+    "TerminalTool",
     "rag_add_document",
     "rag_add_text",
     "rag_search",

@@ -12,6 +12,7 @@ from .rag import (
     rag_search,
 )
 from .search import SearchTool
+from .terminal import TerminalTool
 
 __all__ = [
     "CalculatorTool",
@@ -19,6 +20,7 @@ __all__ = [
     "RAGTool",
     "MemoryTool",
     "NoteTool",
+    "TerminalTool",
     "rag_add_document",
     "rag_add_text",
     "rag_search",
