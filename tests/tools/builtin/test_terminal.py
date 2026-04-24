@@ -61,6 +61,98 @@ class TestTerminalTool:
             await terminal.run({"command": "cat 'abc"})
 
     @pytest.mark.asyncio
+    async def test_pipeline_command_runs_with_shell(self, terminal):
+        completed = subprocess.CompletedProcess(
+            args="cat a.txt | grep foo",
+            returncode=0,
+            stdout="foo\n",
+            stderr="",
+        )
+        with patch(
+            "momu_agent.tools.builtin.terminal.asyncio.to_thread",
+            new=AsyncMock(return_value=completed),
+        ) as mocked:
+            result = await terminal.run({"command": "cat a.txt | grep foo"})
+
+        assert result == "foo\n"
+        call = mocked.await_args
+        assert call is not None
+        assert call.args[1] == "cat a.txt | grep foo"
+        assert call.kwargs["shell"] is True
+
+    @pytest.mark.asyncio
+    async def test_redirection_command_runs_with_shell(self, terminal):
+        completed = subprocess.CompletedProcess(
+            args="grep foo a.txt > out.txt",
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+        with patch(
+            "momu_agent.tools.builtin.terminal.asyncio.to_thread",
+            new=AsyncMock(return_value=completed),
+        ) as mocked:
+            await terminal.run({"command": "grep foo a.txt > out.txt"})
+
+        call = mocked.await_args
+        assert call is not None
+        assert call.kwargs["shell"] is True
+
+    @pytest.mark.asyncio
+    async def test_sequence_command_runs_with_shell(self, terminal):
+        completed = subprocess.CompletedProcess(
+            args="pwd; ls",
+            returncode=0,
+            stdout="/tmp\na\n",
+            stderr="",
+        )
+        with patch(
+            "momu_agent.tools.builtin.terminal.asyncio.to_thread",
+            new=AsyncMock(return_value=completed),
+        ) as mocked:
+            await terminal.run({"command": "pwd; ls"})
+
+        call = mocked.await_args
+        assert call is not None
+        assert call.kwargs["shell"] is True
+
+    @pytest.mark.asyncio
+    async def test_plain_command_runs_without_shell(self, terminal):
+        completed = subprocess.CompletedProcess(
+            args=["ls", "-la"],
+            returncode=0,
+            stdout="ok\n",
+            stderr="",
+        )
+        with patch(
+            "momu_agent.tools.builtin.terminal.asyncio.to_thread",
+            new=AsyncMock(return_value=completed),
+        ) as mocked:
+            await terminal.run({"command": "ls -la"})
+
+        call = mocked.await_args
+        assert call is not None
+        assert call.kwargs["shell"] is False
+        assert call.kwargs["encoding"] == "utf-8"
+        assert call.kwargs["errors"] == "replace"
+
+    @pytest.mark.asyncio
+    async def test_unsupported_shell_syntax_raises(self, terminal):
+        with pytest.raises(ToolException, match="不支持的 shell 语法"):
+            await terminal.run({"command": "cat a.txt <<EOF"})
+
+        with pytest.raises(ToolException, match="不支持的 shell 语法"):
+            await terminal.run({"command": "echo hi &"})
+
+    @pytest.mark.asyncio
+    async def test_command_substitution_raises(self, terminal):
+        with pytest.raises(ToolException, match="不支持的 shell 语法"):
+            await terminal.run({"command": "echo $(pwd)"})
+
+        with pytest.raises(ToolException, match="不支持的 shell 语法"):
+            await terminal.run({"command": "echo `pwd`"})
+
+    @pytest.mark.asyncio
     async def test_cd_success_updates_current_dir(self, tmp_path):
         subdir = tmp_path / "sub"
         subdir.mkdir()
@@ -86,6 +178,11 @@ class TestTerminalTool:
             await terminal.run({"command": "cd .."})
 
     @pytest.mark.asyncio
+    async def test_cd_with_shell_syntax_raises(self, terminal):
+        with pytest.raises(ToolException, match="cd 仅支持单独执行"):
+            await terminal.run({"command": "cd .; pwd"})
+
+    @pytest.mark.asyncio
     async def test_timeout_raises(self, terminal):
         with patch(
             "momu_agent.tools.builtin.terminal.asyncio.to_thread",
@@ -108,6 +205,22 @@ class TestTerminalTool:
         ):
             with pytest.raises(ToolException, match="命令返回码: 2"):
                 await terminal.run({"command": "ls"})
+
+    @pytest.mark.asyncio
+    async def test_none_stdout_stderr_returns_success_message(self, terminal):
+        completed = subprocess.CompletedProcess(
+            args=["ls"],
+            returncode=0,
+            stdout=None,
+            stderr=None,
+        )
+        with patch(
+            "momu_agent.tools.builtin.terminal.asyncio.to_thread",
+            new=AsyncMock(return_value=completed),
+        ):
+            result = await terminal.run({"command": "ls"})
+
+        assert "命令执行成功（无输出）" in result
 
     @pytest.mark.asyncio
     async def test_output_truncation(self, terminal):
