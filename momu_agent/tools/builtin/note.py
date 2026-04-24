@@ -1,6 +1,36 @@
 """NoteTool - 结构化笔记工具
 
-为 Agent 提供结构化笔记能力，支持创建、读取、更新、删除、列表、搜索与摘要。
+为Agent提供结构化笔记能力，支持：
+- 创建/读取/更新/删除笔记
+- 按类型组织（任务状态、结论、阻塞项、行动计划等）
+- 持久化存储（Markdown格式，带YAML前置元数据）
+- 搜索与过滤
+
+使用场景：
+- 长时程任务的状态跟踪
+- 关键结论与依赖记录
+- 待办事项与行动计划
+- 项目知识沉淀
+
+笔记格式示例：
+```markdown
+---
+id: note_20250118_120000_0
+title: 项目进展
+type: task_state
+tags: [milestone, phase1]
+created_at: 2025-01-18T12:00:00
+updated_at: 2025-01-18T12:00:00
+---
+
+# 项目进展
+
+已完成需求分析，下一步：设计方案
+
+## 关键里程碑
+- [x] 需求收集
+- [ ] 方案设计
+```
 """
 
 from __future__ import annotations
@@ -52,6 +82,12 @@ class NoteTool(Tool):
         action = str(parameters.get("action", "")).strip()
         if not action:
             raise ToolException("必须提供 action 参数")
+
+        self.logger.info(
+            "🔧 NoteTool执行: action=%s keys=%s",
+            action,
+            sorted(parameters.keys()),
+        )
 
         if action == "create":
             return self._create_note(parameters)
@@ -141,6 +177,14 @@ class NoteTool(Tool):
         )
         tags = self._as_tags(params.get("tags"))
 
+        self.logger.debug(
+            "🔧 创建笔记请求: title=%s type=%s content_len=%s tags_count=%s",
+            title,
+            note_type,
+            len(content),
+            len(tags),
+        )
+
         if len(self.notes_index["notes"]) >= self.max_notes:
             raise ToolException(f"笔记数量已达上限 ({self.max_notes})")
 
@@ -177,6 +221,12 @@ class NoteTool(Tool):
             }
         )
         self._save_index()
+        self.logger.info(
+            "🔧 笔记创建成功: id=%s type=%s index_total=%s",
+            note_id,
+            note_type,
+            len(self.notes_index["notes"]),
+        )
 
         return f"笔记创建成功\nID: {note_id}\n标题: {title}\n类型: {note_type}"
 
@@ -188,6 +238,7 @@ class NoteTool(Tool):
             raise ToolException(f"未找到笔记: {note_id}")
 
         note = self._markdown_to_note(note_path.read_text(encoding="utf-8"))
+        self.logger.debug("🔧 读取笔记成功: id=%s type=%s", note_id, note.get("type"))
         return self._format_note(note)
 
     def _update_note(self, params: dict[str, Any]) -> str:
@@ -228,6 +279,7 @@ class NoteTool(Tool):
                 break
 
         self._save_index()
+        self.logger.info("🔧 笔记更新成功: id=%s", note_id)
         return f"笔记更新成功: {note_id}"
 
     def _delete_note(self, params: dict[str, Any]) -> str:
@@ -242,6 +294,11 @@ class NoteTool(Tool):
             note for note in self.notes_index["notes"] if note["id"] != note_id
         ]
         self._save_index()
+        self.logger.info(
+            "🔧 笔记删除成功: id=%s index_total=%s",
+            note_id,
+            len(self.notes_index["notes"]),
+        )
 
         return f"笔记已删除: {note_id}"
 
@@ -256,6 +313,12 @@ class NoteTool(Tool):
             notes = [note for note in notes if note["type"] == note_type]
 
         notes = notes[:limit]
+        self.logger.debug(
+            "🔧 列出笔记: note_type=%s limit=%s returned=%s",
+            note_type,
+            limit,
+            len(notes),
+        )
         if not notes:
             return "暂无笔记"
 
@@ -289,7 +352,7 @@ class NoteTool(Tool):
             try:
                 note = self._markdown_to_note(note_path.read_text(encoding="utf-8"))
             except ToolException:
-                self.logger.warning("解析笔记失败: %s", idx_note["id"])
+                self.logger.warning("🔧 解析笔记失败: %s", idx_note["id"])
                 continue
 
             if (
@@ -300,6 +363,13 @@ class NoteTool(Tool):
                 matched_notes.append(note)
 
         matched_notes = matched_notes[:limit]
+        self.logger.debug(
+            "🔧 搜索笔记: query=%s note_type=%s limit=%s matched=%s",
+            query,
+            note_type,
+            limit,
+            len(matched_notes),
+        )
         if not matched_notes:
             return f"未找到匹配 '{query}' 的笔记"
 
@@ -317,6 +387,8 @@ class NoteTool(Tool):
             note_type = note["type"]
             type_counts[note_type] = type_counts.get(note_type, 0) + 1
 
+        self.logger.debug("🔧 笔记摘要: total=%s type_counts=%s", total, type_counts)
+
         lines = ["笔记摘要", "", f"总笔记数: {total}", "", "按类型统计:"]
         for note_type in sorted(type_counts):
             lines.append(f"- {note_type}: {type_counts[note_type]}")
@@ -327,11 +399,13 @@ class NoteTool(Tool):
         if not self.index_file.exists():
             self.notes_index = self._new_index()
             self._save_index()
+            self.logger.info("🔧 初始化笔记索引: %s", self.index_file)
             return
 
         try:
             loaded = json.loads(self.index_file.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
+            self.logger.warning("🔧 索引文件损坏或读取失败，重建索引: %s", self.index_file)
             self.notes_index = self._new_index()
             self._save_index()
             return
@@ -339,11 +413,13 @@ class NoteTool(Tool):
         notes = loaded.get("notes") if isinstance(loaded, dict) else None
         metadata = loaded.get("metadata") if isinstance(loaded, dict) else None
         if not isinstance(notes, list) or not isinstance(metadata, dict):
+            self.logger.warning("🔧 索引结构无效，重建索引: %s", self.index_file)
             self.notes_index = self._new_index()
             self._save_index()
             return
 
         self.notes_index = {"notes": notes, "metadata": metadata}
+        self.logger.debug("🔧 加载笔记索引成功: total=%s", len(notes))
 
     def _save_index(self) -> None:
         now = datetime.now().isoformat()
@@ -356,6 +432,7 @@ class NoteTool(Tool):
             json.dumps(self.notes_index, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        self.logger.debug("🔧 写入笔记索引: total=%s", metadata["total_notes"])
 
     def _new_index(self) -> dict[str, Any]:
         now = datetime.now().isoformat()
