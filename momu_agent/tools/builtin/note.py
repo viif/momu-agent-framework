@@ -405,7 +405,9 @@ class NoteTool(Tool):
         try:
             loaded = json.loads(self.index_file.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            self.logger.warning("🔧 索引文件损坏或读取失败，重建索引: %s", self.index_file)
+            self.logger.warning(
+                "🔧 索引文件损坏或读取失败，重建索引: %s", self.index_file
+            )
             self.notes_index = self._new_index()
             self._save_index()
             return

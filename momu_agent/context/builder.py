@@ -489,7 +489,9 @@ class ContextBuilder:
             self.logger.warning("🧩 LLM摘要失败，回退截断策略: %s", e)
 
         truncated = self._truncate_to_budget(context, available_tokens)
-        self.logger.info("🧩 Compress使用截断策略完成: tokens=%s", count_tokens(truncated))
+        self.logger.info(
+            "🧩 Compress使用截断策略完成: tokens=%s", count_tokens(truncated)
+        )
         return truncated
 
     def _build_compression_messages(

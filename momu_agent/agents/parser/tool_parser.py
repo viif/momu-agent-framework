@@ -91,7 +91,6 @@ class ToolParser:
         )
         return alias_index
 
-
     def _refresh_alias_index_if_needed(self, registry: ToolRegistry) -> None:
         if self._alias_index:
             return

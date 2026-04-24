@@ -53,6 +53,7 @@ def mock_registry():
         side_effect=lambda name: MockSearchTool() if name == "search" else None
     )
     registry.get_function = Mock(return_value=None)
+    registry.get_all_tools = Mock(return_value=[MockSearchTool()])
 
     return registry
 
@@ -265,6 +266,7 @@ async def test_agent_close_called_on_success(mock_llm):
     mock_llm.invoke.return_value = "ok"
     mock_registry = Mock(spec=ToolRegistry)
     mock_registry.get_tools_description = Mock(return_value="暂无可用工具")
+    mock_registry.get_all_tools = Mock(return_value=[])
     mock_registry.close = AsyncMock(return_value=None)
 
     agent = SimpleAgent(name="TestAgent", llm=mock_llm, tool_registry=mock_registry)

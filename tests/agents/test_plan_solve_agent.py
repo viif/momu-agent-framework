@@ -249,6 +249,7 @@ def mock_registry():
     )
     registry.get_tool = Mock(return_value=MockCalculatorTool())
     registry.get_function = Mock(return_value=None)
+    registry.get_all_tools = Mock(return_value=[MockCalculatorTool()])
     return registry
 
 

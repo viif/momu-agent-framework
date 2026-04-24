@@ -57,8 +57,10 @@ async def test_gather_includes_system_history_and_additional_packets():
     assert len(instruction_packets) == 1
     assert instruction_packets[0].content == "system prompt"
     assert len(history_packets) == 1
-    assert history_packets[0].metadata["count"] == 10
+    assert history_packets[0].metadata["count"] == 6
     assert "msg-0" not in history_packets[0].content
+    assert "msg-5" not in history_packets[0].content
+    assert "msg-6" in history_packets[0].content
     assert "msg-11" in history_packets[0].content
     assert any(packet.content == "extra" for packet in packets)
 
