@@ -74,7 +74,7 @@ class ReActAgent(Agent):
         self.max_steps = max_steps
         self.step_prompt = step_prompt or DEFAULT_STEP_PROMPT
         self.logger = get_logger(__name__)
-        self.parser = ToolParser()
+        self.parser = ToolParser(self.tool_registry)
 
     def _build_step_messages(
         self, question: str, history: list[str]

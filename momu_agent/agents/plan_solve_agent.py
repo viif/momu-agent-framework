@@ -109,7 +109,7 @@ class Executor:
         self.prompt_template = prompt_template or DEFAULT_EXECUTOR_PROMPT
         self.tool_registry = tool_registry
         self.max_tool_iterations = max_tool_iterations
-        self.parser = ToolParser()
+        self.parser = ToolParser(self.tool_registry)
         self.logger = get_logger(__name__)
 
     def _build_tool_system_prompt(self) -> str:

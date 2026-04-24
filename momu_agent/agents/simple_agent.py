@@ -26,7 +26,7 @@ class SimpleAgent(Agent):
         super().__init__(name, llm, system_prompt, max_history_length)
         self.tool_registry = tool_registry
         self.logger = get_logger(__name__)
-        self.parser = ToolParser()
+        self.parser = ToolParser(self.tool_registry)
 
     def _get_enhanced_system_prompt(self) -> str:
         """构建增强的系统提示词，包含工具调用协议和工具列表描述"""

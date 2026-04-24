@@ -130,7 +130,7 @@ class ReflectionAgent(Agent):
         self.prompts = custom_prompts if custom_prompts else DEFAULT_PROMPTS
         self.tool_registry = tool_registry
         self.max_tool_iterations = max_tool_iterations
-        self.parser = ToolParser()
+        self.parser = ToolParser(self.tool_registry)
         self.memory = Memory()
 
     async def close(self) -> None:

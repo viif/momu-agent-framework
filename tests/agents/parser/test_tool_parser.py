@@ -1,9 +1,10 @@
-from typing import List
+from typing import List, cast
 
 import pytest
 
 from momu_agent.agents.parser.tool_parser import ToolParser
 from momu_agent.tools.base import ToolParameter
+from momu_agent.tools.registry import ToolRegistry
 
 
 class MockSearchTool:
@@ -52,6 +53,42 @@ class MockCalculatorTool:
                 required=False,
                 default=10.0,
             ),
+        ]
+
+    def get_parameters(self) -> List[ToolParameter]:
+        return self.params
+
+
+class MockRecordTool:
+    """模拟一个支持 action 的通用记录工具"""
+
+    def __init__(self):
+        self.name = "record"
+        self.description = "通用记录工具，支持创建、读取、更新、删除、列表、搜索与摘要"
+        self.params = [
+            ToolParameter(
+                name="action", type="string", description="动作", required=True
+            ),
+            ToolParameter(
+                name="title", type="string", description="标题", required=False
+            ),
+            ToolParameter(
+                name="content", type="string", description="内容", required=False
+            ),
+        ]
+
+    def get_parameters(self) -> List[ToolParameter]:
+        return self.params
+
+
+class MockNoActionTool:
+    """模拟一个不支持 action 的工具"""
+
+    def __init__(self):
+        self.name = "fetch"
+        self.description = "抓取工具"
+        self.params = [
+            ToolParameter(name="url", type="string", description="地址", required=True)
         ]
 
     def get_parameters(self) -> List[ToolParameter]:
@@ -207,6 +244,9 @@ def test_prepare_tool_task_with_function_tool(parser):
         def get_function(self, name):
             return (lambda text: f"ok:{text}") if name == "func_tool" else None
 
+        def get_all_tools(self):
+            return []
+
     task = parser.prepare_tool_task("func_tool", '{"input": "hello"}', MockRegistry())
 
     assert task["tool_name"] == "func_tool"
@@ -223,7 +263,137 @@ def test_prepare_tool_task_not_registered(parser):
         def get_function(self, name):
             return None
 
+        def get_all_tools(self):
+            return []
+
     task = parser.prepare_tool_task("missing", "{}", MockRegistry())
 
     assert task["tool_name"] == "missing"
+    assert task["error"] == "工具未注册"
+
+
+def test_extract_tool_calls_supports_list_in_json(parser):
+    """测试 JSON 数组参数不会被 ] 提前截断"""
+    text = '[TOOL_CALL:note:{"action": "create", "tags": ["demo", "examples"]}]'
+    result = parser.extract_tool_calls(text)
+
+    assert len(result) == 1
+    assert result[0]["tool_name"] == "note"
+    assert (
+        result[0]["raw_params"] == '{"action": "create", "tags": ["demo", "examples"]}'
+    )
+
+
+def test_parse_parameters_supports_bare_action_word(parser):
+    """测试兼容纯动作词参数"""
+    assert parser.parse_parameters("list") == {"action": "list"}
+    assert parser.parse_parameters("summary") == {"action": "summary"}
+    assert parser.parse_parameters("stats") == {"action": "stats"}
+    assert parser.parse_parameters("clear") == {"action": "clear"}
+
+
+def test_prepare_tool_task_generic_alias_without_action_field():
+    """测试通用别名：tool_suffix 在缺少 action 时注入 action。"""
+
+    class MockRegistry:
+        def __init__(self):
+            self.record_tool = MockRecordTool()
+
+        def get_tool(self, name):
+            if name == "record":
+                return self.record_tool
+            return None
+
+        def get_function(self, name):
+            return None
+
+        def get_all_tools(self):
+            return [self.record_tool]
+
+    parser = ToolParser(cast(ToolRegistry, MockRegistry()))
+    task = parser.prepare_tool_task(
+        "record_create", '{"title": "A", "content": "B"}', MockRegistry()
+    )
+
+    assert task["tool_name"] == "record"
+    assert task["input_data"]["action"] == "create"
+    assert task["input_data"]["title"] == "A"
+
+
+def test_prepare_tool_task_generic_alias_keep_existing_action():
+    """测试通用别名：若参数已有 action，则保留参数中的 action。"""
+
+    class MockRegistry:
+        def __init__(self):
+            self.record_tool = MockRecordTool()
+
+        def get_tool(self, name):
+            if name == "record":
+                return self.record_tool
+            return None
+
+        def get_function(self, name):
+            return None
+
+        def get_all_tools(self):
+            return [self.record_tool]
+
+    parser = ToolParser(cast(ToolRegistry, MockRegistry()))
+    task = parser.prepare_tool_task(
+        "record_list", '{"action": "search", "title": "A"}', MockRegistry()
+    )
+
+    assert task["tool_name"] == "record"
+    assert task["input_data"]["action"] == "search"
+
+
+def test_prepare_tool_task_no_alias_when_base_has_no_action_param():
+    """测试 base 工具不含 action 参数时不做别名归一化。"""
+
+    class MockRegistry:
+        def __init__(self):
+            self.fetch_tool = MockNoActionTool()
+
+        def get_tool(self, name):
+            if name == "fetch":
+                return self.fetch_tool
+            return None
+
+        def get_function(self, name):
+            return None
+
+        def get_all_tools(self):
+            return [self.fetch_tool]
+
+    parser = ToolParser(cast(ToolRegistry, MockRegistry()))
+    task = parser.prepare_tool_task(
+        "fetch_list", '{"url": "https://a.com"}', MockRegistry()
+    )
+
+    assert task["tool_name"] == "fetch_list"
+    assert task["error"] == "工具未注册"
+
+
+def test_prepare_tool_task_no_alias_when_suffix_not_common_action():
+    """测试后缀不在通用动作词集合时不做别名归一化。"""
+
+    class MockRegistry:
+        def __init__(self):
+            self.record_tool = MockRecordTool()
+
+        def get_tool(self, name):
+            if name == "record":
+                return self.record_tool
+            return None
+
+        def get_function(self, name):
+            return None
+
+        def get_all_tools(self):
+            return [self.record_tool]
+
+    parser = ToolParser(cast(ToolRegistry, MockRegistry()))
+    task = parser.prepare_tool_task("record_custom", '{"title": "A"}', MockRegistry())
+
+    assert task["tool_name"] == "record_custom"
     assert task["error"] == "工具未注册"
