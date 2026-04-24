@@ -1,15 +1,16 @@
 # momu-agent-framework
 
-参考 HelloAgents 实现的智能体框架，提供 Agent、工具系统、记忆系统、RAG 与 OpenAI 兼容 LLM 接入能力。
+参考 HelloAgents 实现的智能体框架，提供 Agent、工具系统、记忆系统、RAG、上下文工程与 OpenAI 兼容 LLM 接入能力。
 
 ## 🚀 特性
 
-- **全异步设计**：`Agent.run()`、工具执行主路径与工具链执行均为 `async`
+- **全异步设计**：`Agent.run()`、工具执行主路径、工具链与上下文构建均为 `async`
 - **Agent 体系**：抽象基类 `Agent` + 四种开箱即用 Agent：`SimpleAgent`、`ReActAgent`、`PlanSolveAgent`、`ReflectionAgent`
 - **工具系统**：`ToolRegistry` 统一管理工具，支持 `Tool` 对象、同步函数和异步函数注册
 - **工具链与并发**：`ToolChain` / `ToolChainManager` 顺序编排，`ToolExecutor` 并发执行
 - **流式输出**：`SimpleAgent.stream_run()` 支持逐段异步输出
-- **内置工具**：`CalculatorTool`、`SearchTool`、`RAGTool`、`MemoryTool`
+- **内置工具**：`CalculatorTool`、`SearchTool`、`RAGTool`、`MemoryTool`、`NoteTool`、`TerminalTool`
+- **上下文工程**：`ContextBuilder` 实现 GSSC（Gather-Select-Structure-Compress）流程
 - **记忆系统**：`WorkingMemory`、`EpisodicMemory`、`SemanticMemory` 统一管理
 - **RAG 能力**：支持文本/文档入库、检索与基于上下文问答
 - **OpenAI 兼容**：`LLM` 可接入任何兼容 OpenAI 接口的模型服务
@@ -51,7 +52,7 @@ cp .env.example .env
 ```env
 LLM_MODEL_ID=qwen-turbo
 LLM_API_KEY=sk-your-api-key-here
-LLM_BASE_URL=https://your-openai-compatible-endpoint/v1
+LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
 常用可选项：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`、`EMBED_MODEL_NAME`。
@@ -108,6 +109,7 @@ uv run python examples/plan_solve_agent_demo.py
 uv run python examples/reflection_agent_demo.py
 uv run python examples/memory_tool_demo.py
 uv run python examples/rag_tool_demo.py
+uv run python examples/context_aware_agent_demo.py
 ```
 
 ## 📂 目录结构
@@ -116,9 +118,10 @@ uv run python examples/rag_tool_demo.py
 momu_agent/
 ├── core/               # Agent 抽象、LLM、消息、异常
 ├── tools/              # Tool 抽象、Registry、Chain、Executor、内置工具
-│   └── builtin/        # calculator/search/rag/memory
+│   └── builtin/        # calculator/search/rag/memory/note/terminal
 ├── agents/             # Simple/ReAct/PlanSolve/Reflection
 │   └── parser/         # 工具调用解析器
+├── context/            # ContextBuilder（GSSC）
 ├── memory/             # working/episodic/semantic + manager
 ├── storage/            # document/vector/graph 存储
 ├── rag/                # 文档处理与检索管线
@@ -129,6 +132,7 @@ momu_agent/
 
 ```bash
 uv run pytest
+uv run pytest tests/context/test_builder.py
 uv run ruff check .
 uv run ruff format --check .
 uv run ruff check --fix .
@@ -137,7 +141,7 @@ uv run ruff format .
 
 CI 在 `main` 的 push/PR 上运行：
 - `lint`：Python 3.13 + Ruff 检查
-- `test`：Python 3.11 / 3.12 / 3.13 运行 pytest
+- `test`：Python 3.11 / 3.12 / 3.13 运行 pytest（含 sentence-transformers 缓存与 CPU 版 torch 安装）
 
 ## 📚 参考
 
