@@ -3,6 +3,7 @@
 from .base import Tool, ToolParameter
 from .builtin.calculator import CalculatorTool
 from .builtin.memory import MemoryTool, memory_add, memory_get_stats, memory_search
+from .builtin.note import NoteTool
 from .builtin.rag import (
     RAGTool,
     rag_add_document,
@@ -27,6 +28,7 @@ __all__ = [
     "SearchTool",
     "RAGTool",
     "MemoryTool",
+    "NoteTool",
     "rag_add_document",
     "rag_add_text",
     "rag_search",

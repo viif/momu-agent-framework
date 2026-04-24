@@ -2,6 +2,7 @@
 
 from .calculator import CalculatorTool
 from .memory import MemoryTool, memory_add, memory_get_stats, memory_search
+from .note import NoteTool
 from .rag import (
     RAGTool,
     rag_add_document,
@@ -17,6 +18,7 @@ __all__ = [
     "SearchTool",
     "RAGTool",
     "MemoryTool",
+    "NoteTool",
     "rag_add_document",
     "rag_add_text",
     "rag_search",
