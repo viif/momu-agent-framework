@@ -1257,6 +1257,7 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "tiktoken" },
 ]
 
 [package.optional-dependencies]
@@ -1304,6 +1305,7 @@ requires-dist = [
     { name = "serpapi", marker = "extra == 'search'", specifier = ">=1.0.2" },
     { name = "spacy", marker = "extra == 'memory'", specifier = ">=3.8.14" },
     { name = "tavily-python", marker = "extra == 'search'", specifier = ">=0.7.23" },
+    { name = "tiktoken", specifier = ">=0.12.0" },
 ]
 provides-extras = ["search", "memory", "rag"]
 
