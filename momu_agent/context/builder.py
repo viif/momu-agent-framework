@@ -99,19 +99,41 @@ class ContextBuilder:
         additional_packets: list[ContextPacket] | None = None,
     ) -> str:
         """构建完整上下文"""
+        history = conversation_history or []
+        extras = additional_packets or []
+        self.logger.debug(
+            "🧩 ContextBuilder开始构建: query_len=%s history_count=%s has_system=%s extra_count=%s",
+            len(user_query),
+            len(history),
+            bool(system_instructions),
+            len(extras),
+        )
+
         packets = await self._gather(
             user_query=user_query,
-            conversation_history=conversation_history or [],
+            conversation_history=history,
             system_instructions=system_instructions,
-            additional_packets=additional_packets or [],
+            additional_packets=extras,
         )
+        self.logger.debug("🧩 Gather完成: packets=%s", len(packets))
+
         selected_packets = self._select(packets, user_query)
+        self.logger.debug("🧩 Select完成: selected_packets=%s", len(selected_packets))
+
         structured_context = self._structure(
             selected_packets=selected_packets,
             user_query=user_query,
             system_instructions=system_instructions,
         )
-        return await self._compress(structured_context)
+        self.logger.debug(
+            "🧩 Structure完成: structured_tokens=%s", count_tokens(structured_context)
+        )
+
+        compressed = await self._compress(structured_context)
+        self.logger.info(
+            "🧩 ContextBuilder构建完成: final_tokens=%s", count_tokens(compressed)
+        )
+        return compressed
 
     async def _gather(
         self,
@@ -122,20 +144,26 @@ class ContextBuilder:
     ) -> list[ContextPacket]:
         """Gather: 收集候选信息"""
         packets: list[ContextPacket] = []
+        self.logger.debug(
+            "🧩 Gather开始: history_count=%s has_system=%s extra_count=%s",
+            len(conversation_history),
+            bool(system_instructions),
+            len(additional_packets),
+        )
 
         # P0: 系统指令（强约束）
         if system_instructions:
-            packets.append(
-                ContextPacket(
-                    content=system_instructions,
-                    metadata={"type": "instructions"},
-                )
+            packet = ContextPacket(
+                content=system_instructions,
+                metadata={"type": "instructions"},
             )
+            packets.append(packet)
+            self.logger.debug("🧩 Gather加入系统指令: tokens=%s", packet.token_count)
 
         # P1: 从记忆中获取任务状态与关键结论
         if self.memory_tool:
             try:
-                # 搜索任务状态相关记忆
+                self.logger.debug("🧩 Gather开始检索MemoryTool: task_state")
                 state_results = await self.memory_tool.run(
                     {
                         "action": "search",
@@ -145,13 +173,18 @@ class ContextBuilder:
                     }
                 )
                 if self._has_retrieval_content(state_results):
-                    packets.append(
-                        ContextPacket(
-                            content=state_results,
-                            metadata={"type": "task_state", "importance": "high"},
-                        )
+                    packet = ContextPacket(
+                        content=state_results,
+                        metadata={"type": "task_state", "importance": "high"},
                     )
-                # 搜索与当前查询相关的记忆
+                    packets.append(packet)
+                    self.logger.debug(
+                        "🧩 Gather加入task_state: tokens=%s", packet.token_count
+                    )
+                else:
+                    self.logger.debug("🧩 MemoryTool task_state检索无有效内容")
+
+                self.logger.debug("🧩 Gather开始检索MemoryTool: related_memory")
                 related_results = await self.memory_tool.run(
                     {
                         "action": "search",
@@ -160,18 +193,23 @@ class ContextBuilder:
                     }
                 )
                 if self._has_retrieval_content(related_results):
-                    packets.append(
-                        ContextPacket(
-                            content=related_results,
-                            metadata={"type": "related_memory"},
-                        )
+                    packet = ContextPacket(
+                        content=related_results,
+                        metadata={"type": "related_memory"},
                     )
+                    packets.append(packet)
+                    self.logger.debug(
+                        "🧩 Gather加入related_memory: tokens=%s", packet.token_count
+                    )
+                else:
+                    self.logger.debug("🧩 MemoryTool related_memory检索无有效内容")
             except Exception as e:
-                self.logger.warning("记忆检索失败: %s", e)
+                self.logger.warning("🧩 记忆检索失败: %s", e)
 
         # P2: 从RAG中获取事实证据
         if self.rag_tool:
             try:
+                self.logger.debug("🧩 Gather开始检索RAGTool")
                 rag_results = await self.rag_tool.run(
                     {
                         "action": "search",
@@ -180,36 +218,58 @@ class ContextBuilder:
                     }
                 )
                 if self._has_retrieval_content(rag_results):
-                    packets.append(
-                        ContextPacket(
-                            content=rag_results,
-                            metadata={"type": "knowledge_base"},
-                        )
+                    packet = ContextPacket(
+                        content=rag_results,
+                        metadata={"type": "knowledge_base"},
                     )
+                    packets.append(packet)
+                    self.logger.debug(
+                        "🧩 Gather加入knowledge_base: tokens=%s", packet.token_count
+                    )
+                else:
+                    self.logger.debug("🧩 RAGTool检索无有效内容")
             except Exception as e:
-                self.logger.warning("RAG检索失败: %s", e)
+                self.logger.warning("🧩 RAG检索失败: %s", e)
 
         # P3: 对话历史（辅助材料）
         if conversation_history:
-            # 只保留最近N条
-            recent_history = conversation_history[-10:]
+            # 仅保留用户/助手消息，避免 tool 结果膨胀上下文
+            user_assistant_history = [
+                msg for msg in conversation_history if msg.role in {"user", "assistant"}
+            ]
+            recent_history = user_assistant_history[-6:]
             history_text = "\n".join(
-                [f"[{msg.role}] {msg.content}" for msg in recent_history]
+                [f"[{msg.role}] {msg.content[:500]}" for msg in recent_history]
             )
-            packets.append(
-                ContextPacket(
-                    content=history_text,
-                    metadata={"type": "history", "count": len(recent_history)},
-                )
+            packet = ContextPacket(
+                content=history_text,
+                metadata={"type": "history", "count": len(recent_history)},
             )
+            packets.append(packet)
+            self.logger.debug(
+                "🧩 Gather加入history: count=%s tokens=%s",
+                len(recent_history),
+                packet.token_count,
+            )
+
         # 添加额外包
-        packets.extend(additional_packets)
+        if additional_packets:
+            packets.extend(additional_packets)
+            self.logger.debug("🧩 Gather加入额外包: count=%s", len(additional_packets))
+
+        self.logger.info(
+            "🧩 Gather完成: packets=%s total_tokens=%s",
+            len(packets),
+            sum(packet.token_count for packet in packets),
+        )
         return packets
 
     def _select(
         self, packets: list[ContextPacket], user_query: str
     ) -> list[ContextPacket]:
         """Select: 基于分数与预算的筛选"""
+        self.logger.debug("🧩 Select开始: packet_count=%s", len(packets))
+
         # 1) 计算相关性（关键词重叠）
         query_tokens = set(user_query.lower().split())
         for packet in packets:
@@ -247,12 +307,21 @@ class ContextBuilder:
             if packet.metadata.get("type") != "instructions"
         ]
 
-        # 5) 依据 min_relevance 过滤（对非系统包）
+        # 5) 依据 min_relevance 过滤（对非系统包），history 保底保留
         filtered = [
             packet
             for packet in remaining
-            if packet.relevance_score >= self.config.min_relevance
+            if packet.metadata.get("type") == "history"
+            or packet.relevance_score >= self.config.min_relevance
         ]
+
+        self.logger.debug(
+            "🧩 Select打分结果: system_packets=%s remaining=%s filtered=%s min_relevance=%.2f",
+            len(system_packets),
+            len(remaining),
+            len(filtered),
+            self.config.min_relevance,
+        )
 
         # 6) 按预算填充
         available_tokens = self.config.get_available_tokens()
@@ -264,14 +333,36 @@ class ContextBuilder:
             if used_tokens + packet.token_count <= available_tokens:
                 selected.append(packet)
                 used_tokens += packet.token_count
+            else:
+                self.logger.debug(
+                    "🧩 Select跳过系统包(预算不足): type=%s packet_tokens=%s used=%s budget=%s",
+                    packet.metadata.get("type"),
+                    packet.token_count,
+                    used_tokens,
+                    available_tokens,
+                )
 
         # 再按分数加入其余包
         for packet in filtered:
             if used_tokens + packet.token_count > available_tokens:
+                self.logger.debug(
+                    "🧩 Select跳过候选包(预算不足): type=%s packet_tokens=%s used=%s budget=%s relevance=%.3f",
+                    packet.metadata.get("type"),
+                    packet.token_count,
+                    used_tokens,
+                    available_tokens,
+                    packet.relevance_score,
+                )
                 continue
             selected.append(packet)
             used_tokens += packet.token_count
 
+        self.logger.info(
+            "🧩 Select完成: selected=%s used_tokens=%s budget=%s",
+            len(selected),
+            used_tokens,
+            available_tokens,
+        )
         return selected
 
     def _structure(
@@ -345,20 +436,37 @@ class ContextBuilder:
             "4. 下一步行动建议（如适用）"
         )
 
-        return "\n\n".join(sections)
+        structured = "\n\n".join(sections)
+        self.logger.debug(
+            "🧩 Structure分段统计: role=%s state=%s evidence=%s context=%s total_sections=%s",
+            len(p0_packets),
+            len(p1_packets),
+            len(p2_packets),
+            len(p3_packets),
+            len(sections),
+        )
+        return structured
 
     async def _compress(self, context: str) -> str:
         """Compress: 压缩与规范化"""
         if not self.config.enable_compression:
+            self.logger.debug("🧩 Compress跳过: enable_compression=False")
             return context
 
         current_tokens = count_tokens(context)
         available_tokens = self.config.get_available_tokens()
+        self.logger.debug(
+            "🧩 Compress检查预算: current_tokens=%s available_tokens=%s",
+            current_tokens,
+            available_tokens,
+        )
+
         if current_tokens <= available_tokens:
+            self.logger.debug("🧩 Compress无需压缩: 已在预算内")
             return context
 
         self.logger.warning(
-            "上下文超预算 (%s > %s)，尝试LLM高保真摘要",
+            "🧩 上下文超预算 (%s > %s)，尝试LLM高保真摘要",
             current_tokens,
             available_tokens,
         )
@@ -369,15 +477,20 @@ class ContextBuilder:
             )
             if compressed and compressed.strip():
                 compressed = compressed.strip()
-                if count_tokens(compressed) <= available_tokens:
+                compressed_tokens = count_tokens(compressed)
+                self.logger.debug("🧩 LLM摘要完成: tokens=%s", compressed_tokens)
+                if compressed_tokens <= available_tokens:
+                    self.logger.info("🧩 Compress使用LLM摘要成功")
                     return compressed
-                self.logger.warning("LLM摘要仍超预算，回退截断策略")
+                self.logger.warning("🧩 LLM摘要仍超预算，回退截断策略")
             else:
-                self.logger.warning("LLM摘要为空，回退截断策略")
+                self.logger.warning("🧩 LLM摘要为空，回退截断策略")
         except Exception as e:
-            self.logger.warning("LLM摘要失败，回退截断策略: %s", e)
+            self.logger.warning("🧩 LLM摘要失败，回退截断策略: %s", e)
 
-        return self._truncate_to_budget(context, available_tokens)
+        truncated = self._truncate_to_budget(context, available_tokens)
+        self.logger.info("🧩 Compress使用截断策略完成: tokens=%s", count_tokens(truncated))
+        return truncated
 
     def _build_compression_messages(
         self, context: str, available_tokens: int
@@ -418,6 +531,12 @@ class ContextBuilder:
             compressed_lines.append(line)
             used_tokens += line_tokens
 
+        self.logger.debug(
+            "🧩 截断完成: kept_lines=%s used_tokens=%s budget=%s",
+            len(compressed_lines),
+            used_tokens,
+            available_tokens,
+        )
         return "\n".join(compressed_lines)
 
     @staticmethod
