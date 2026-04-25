@@ -27,9 +27,11 @@ class MemoryTool(Tool):
             name="memory",
             description=(
                 "基于内置记忆系统的统一记忆工具，支持添加、检索、更新、删除、统计、遗忘与清空；"
-                "其中 working(工作记忆，短期会话上下文，容量有限且会自动清理)、"
-                "episodic(情景记忆，记录具体事件与交互经历，可按 session_id 和时间检索)、"
+                "其中 working(工作记忆，适合保存用户偏好、口味、习惯、当前会话中的个人事实，容量有限且会自动清理)、"
+                "episodic(情景记忆，记录具体发生过的事、交互经历与带明显时间线索的内容，可按 session_id 和时间检索)、"
                 "semantic(语义记忆，沉淀概念、规则、原理与实体关系等稳定知识)。"
+                "回答‘我喜欢什么’‘我平时如何’‘我刚才说过什么’这类问题时，应先使用 search，优先检查 working；"
+                "不确定时不要先把检索范围限制到 episodic。"
             ),
         )
         self.logger = get_logger(__name__)
@@ -418,7 +420,6 @@ class MemoryTool(Tool):
 
 async def memory_add(content: str, **kwargs: Any) -> str:
     """便捷函数：添加记忆。"""
-    # 便捷函数每次创建独立工具实例，适合脚本侧直接调用。
     tool = MemoryTool()
     return await tool.run({"action": "add", "content": content, **kwargs})
 
