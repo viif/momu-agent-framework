@@ -31,11 +31,11 @@ class DocumentStore(ABC):
         importance: float,
         properties: dict[str, Any] | None = None,
     ) -> str:
-        """添加或替换一条记忆，返回 memory_id。"""
+        """添加或替换一条记录，返回 memory_id。"""
 
     @abstractmethod
     async def get_memory(self, memory_id: str) -> dict[str, Any] | None:
-        """按 ID 获取单条记忆，不存在时返回 None。"""
+        """按 ID 获取单条记录，不存在时返回 None。"""
 
     @abstractmethod
     async def search_memories(
@@ -47,7 +47,7 @@ class DocumentStore(ABC):
         importance_threshold: float | None = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
-        """按条件过滤记忆，结果按 importance DESC、timestamp DESC 排序。"""
+        """按条件过滤记录，结果按 importance DESC、timestamp DESC 排序。"""
 
     @abstractmethod
     async def update_memory(
@@ -57,15 +57,15 @@ class DocumentStore(ABC):
         importance: float | None = None,
         properties: dict[str, Any] | None = None,
     ) -> bool:
-        """更新记忆的指定字段，返回是否命中记录。三个字段均为 None 时直接返回 False。"""
+        """更新记录的指定字段，返回是否命中记录。三个字段均为 None 时直接返回 False。"""
 
     @abstractmethod
     async def delete_memory(self, memory_id: str) -> bool:
-        """删除指定记忆，返回是否命中记录。"""
+        """删除指定记录，返回是否命中记录。"""
 
     @abstractmethod
     async def get_database_stats(self) -> dict[str, Any]:
-        """返回数据库统计信息，包括各表记录数、记忆类型分布和活跃用户 Top 10。"""
+        """返回数据库统计信息，包括各表记录数、类型分布和活跃用户 Top 10。"""
 
     @abstractmethod
     async def add_document(
@@ -73,11 +73,11 @@ class DocumentStore(ABC):
         content: str,
         metadata: dict[str, Any] | None = None,
     ) -> str:
-        """将内容作为 document 类型记忆写入，返回自动生成的 UUID。"""
+        """将内容作为 document 类型记录写入，返回自动生成的 UUID。"""
 
     @abstractmethod
     async def get_document(self, document_id: str) -> dict[str, Any] | None:
-        """按 ID 获取文档记忆，不存在时返回 None。"""
+        """按 ID 获取文档记录，不存在时返回 None。"""
 
     @abstractmethod
     async def close(self) -> None:
@@ -164,7 +164,7 @@ class SQLiteDocumentStore(DocumentStore):
         importance: float,
         properties: dict[str, Any] | None = None,
     ) -> str:
-        """添加或替换一条记忆，返回 memory_id。"""
+        """添加或替换一条记录，返回 memory_id。"""
         try:
             await self._ensure_db()
             assert self._conn is not None
@@ -192,7 +192,7 @@ class SQLiteDocumentStore(DocumentStore):
                 )
                 await self._conn.commit()
             self.logger.debug(
-                f"🧠 写入记忆 [{memory_id}] (user: '{user_id}', type: '{memory_type}', "
+                f"🧠 写入记录 [{memory_id}] (user: '{user_id}', type: '{memory_type}', "
                 f"importance: {importance})"
             )
             return memory_id
@@ -203,7 +203,7 @@ class SQLiteDocumentStore(DocumentStore):
             raise StorageException(f"add_memory failed: {e}") from e
 
     async def get_memory(self, memory_id: str) -> dict[str, Any] | None:
-        """按 ID 获取单条记忆，不存在时返回 None。"""
+        """按 ID 获取单条记录，不存在时返回 None。"""
         try:
             await self._ensure_db()
             assert self._conn is not None
@@ -218,7 +218,7 @@ class SQLiteDocumentStore(DocumentStore):
             ) as cursor:
                 row = await cursor.fetchone()
             if not row:
-                self.logger.debug(f"🧠 未找到记忆 [{memory_id}]")
+                self.logger.debug(f"🧠 未找到记录 [{memory_id}]")
                 return None
             return {
                 "memory_id": row["id"],
@@ -246,7 +246,7 @@ class SQLiteDocumentStore(DocumentStore):
         importance_threshold: float | None = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
-        """按条件过滤记忆，结果按 importance DESC、timestamp DESC 排序。"""
+        """按条件过滤记录，结果按 importance DESC、timestamp DESC 排序。"""
         try:
             await self._ensure_db()
             assert self._conn is not None
@@ -296,7 +296,7 @@ class SQLiteDocumentStore(DocumentStore):
                 for row in rows
             ]
             self.logger.debug(
-                f"🧠 搜索记忆，命中 {len(results)} 条 "
+                f"🧠 搜索记录，命中 {len(results)} 条 "
                 f"(user: {user_id!r}, type: {memory_type!r}, limit: {limit})"
             )
             return results
@@ -313,7 +313,7 @@ class SQLiteDocumentStore(DocumentStore):
         importance: float | None = None,
         properties: dict[str, Any] | None = None,
     ) -> bool:
-        """更新记忆的指定字段，返回是否命中记录。三个字段均为 None 时直接返回 False。"""
+        """更新记录的指定字段，返回是否命中记录。三个字段均为 None 时直接返回 False。"""
         if content is None and importance is None and properties is None:
             return False
         try:
@@ -340,9 +340,9 @@ class SQLiteDocumentStore(DocumentStore):
                 await self._conn.commit()
                 hit = cursor.rowcount > 0
             if hit:
-                self.logger.debug(f"🧠 更新记忆 [{memory_id}] 成功")
+                self.logger.debug(f"🧠 更新记录 [{memory_id}] 成功")
             else:
-                self.logger.warning(f"🧠 更新记忆失败，未找到 [{memory_id}]")
+                self.logger.warning(f"🧠 更新记录失败，未找到 [{memory_id}]")
             return hit
         except StorageException:
             raise
@@ -351,7 +351,7 @@ class SQLiteDocumentStore(DocumentStore):
             raise StorageException(f"update_memory failed: {e}") from e
 
     async def delete_memory(self, memory_id: str) -> bool:
-        """删除指定记忆，返回是否命中记录。"""
+        """删除指定记录，返回是否命中记录。"""
         try:
             await self._ensure_db()
             assert self._conn is not None
@@ -362,9 +362,9 @@ class SQLiteDocumentStore(DocumentStore):
                 await self._conn.commit()
                 hit = cursor.rowcount > 0
             if hit:
-                self.logger.debug(f"🧠 删除记忆 [{memory_id}] 成功")
+                self.logger.debug(f"🧠 删除记录 [{memory_id}] 成功")
             else:
-                self.logger.warning(f"🧠 删除记忆失败，未找到 [{memory_id}]")
+                self.logger.warning(f"🧠 删除记录失败，未找到 [{memory_id}]")
             return hit
         except StorageException:
             raise
@@ -373,7 +373,7 @@ class SQLiteDocumentStore(DocumentStore):
             raise StorageException(f"delete_memory failed: {e}") from e
 
     async def get_database_stats(self) -> dict[str, Any]:
-        """返回数据库统计信息，包括各表记录数、记忆类型分布和活跃用户 Top 10。"""
+        """返回数据库统计信息，包括各表记录数、类型分布和活跃用户 Top 10。"""
         try:
             await self._ensure_db()
             assert self._conn is not None
@@ -421,7 +421,7 @@ class SQLiteDocumentStore(DocumentStore):
         content: str,
         metadata: dict[str, Any] | None = None,
     ) -> str:
-        """将内容作为 document 类型记忆写入，返回自动生成的 UUID。"""
+        """将内容作为 document 类型记录写入，返回自动生成的 UUID。"""
         import time
 
         doc_id = str(uuid4())
@@ -437,7 +437,7 @@ class SQLiteDocumentStore(DocumentStore):
         )
 
     async def get_document(self, document_id: str) -> dict[str, Any] | None:
-        """按 ID 获取文档记忆，不存在时返回 None。"""
+        """按 ID 获取文档记录，不存在时返回 None。"""
         return await self.get_memory(document_id)
 
     async def close(self) -> None:
