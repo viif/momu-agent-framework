@@ -63,6 +63,29 @@ class TestMemoryTool:
             await memory_tool.run({"action": "add", "content": "   "})
 
     @pytest.mark.asyncio
+    async def test_add_with_explicit_type_keeps_resolved_type_when_auto_classify_enabled(
+        self, memory_tool, mock_manager
+    ):
+        result = await memory_tool.run(
+            {
+                "action": "add",
+                "content": "remember this",
+                "type": "semantic",
+                "auto_classify": True,
+            }
+        )
+
+        assert "已添加记忆: memory-1" in result
+        assert "记忆类型: semantic" in result
+        mock_manager.add_memory.assert_awaited_once_with(
+            content="remember this",
+            memory_type="semantic",
+            importance=None,
+            metadata=None,
+            auto_classify=True,
+        )
+
+    @pytest.mark.asyncio
     async def test_search_success_formats_results(self, memory_tool, mock_manager):
         memory = Mock(
             id="m1",

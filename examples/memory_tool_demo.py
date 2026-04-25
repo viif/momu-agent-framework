@@ -42,7 +42,10 @@ async def demo_memory_with_agent(config: Config) -> None:
     demo_user_id = f"memory_demo_{int(time.time())}"
     registry = ToolRegistry()
     registry.register_tool(
-        MemoryTool(user_id=demo_user_id, memory_types=["working", "episodic"])
+        MemoryTool(
+            user_id=demo_user_id,
+            memory_types=["working", "episodic", "semantic"],
+        )
     )
 
     agent = SimpleAgent(
@@ -62,8 +65,10 @@ async def demo_memory_with_agent(config: Config) -> None:
     questions = [
         "帮我记一下，我平时喜欢喝燕麦拿铁，不另外加糖。",
         "再帮我记一条今天发生的事：我刚跑通了 MemoryTool 的 SimpleAgent 示例。",
+        "帮我再记住：小陈的老师是老王。",
         "我平时喜欢喝什么咖啡？",
         "今天发生了什么事？",
+        "小陈的老师是谁？",
         "顺便看看现在记忆库里有多少内容。",
     ]
 

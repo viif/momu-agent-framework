@@ -649,6 +649,55 @@ async def test_auto_classifies_preference_like_content_as_working(
 
 
 @pytest.mark.asyncio
+async def test_explicit_semantic_type_bypasses_auto_classification(
+    manager: MemoryManager,
+):
+    memory_id = await manager.add_memory(
+        "小陈的老师是老王。",
+        memory_type="semantic",
+    )
+
+    semantic_results = await manager.retrieve_memories(
+        "小陈 老王",
+        memory_types=["semantic"],
+        limit=5,
+    )
+    working_memory = manager.memory_types["working"]
+    assert isinstance(working_memory, WorkingMemory)
+    working_results = await working_memory.get_all()
+    matched_working = [memory for memory in working_results if memory.id == memory_id]
+
+    assert [memory.id for memory in semantic_results] == [memory_id]
+    assert semantic_results[0].metadata["classification_source"] == "argument_explicit"
+    assert semantic_results[0].metadata["classification_reasons"] == [
+        "explicit_memory_type:semantic"
+    ]
+    assert matched_working == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_episodic_type_bypasses_auto_classification(
+    manager: MemoryManager,
+):
+    memory_id = await manager.add_memory(
+        "团队周会纪要",
+        memory_type="episodic",
+    )
+
+    episodic_results = await manager.retrieve_memories(
+        "周会",
+        memory_types=["episodic"],
+        limit=5,
+    )
+
+    assert [memory.id for memory in episodic_results] == [memory_id]
+    assert episodic_results[0].metadata["classification_source"] == "argument_explicit"
+    assert episodic_results[0].metadata["classification_reasons"] == [
+        "explicit_memory_type:episodic"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_close_continues_when_backend_fails(manager: MemoryManager):
     backends = list(manager.memory_types.values())
     close_mocks: list[AsyncMock] = []

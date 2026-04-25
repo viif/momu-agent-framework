@@ -225,16 +225,17 @@ class MemoryTool(Tool):
             raise ToolException("add 需要提供非空 content")
 
         memory_type = str(parameters.get("memory_type", "working")).strip() or "working"
+        auto_classify = bool(parameters.get("auto_classify", True))
         importance = self._as_float(parameters.get("importance"), "importance")
         memory_id = await self.memory_manager.add_memory(
             content=content,
             memory_type=memory_type,
             importance=importance,
             metadata=self._as_metadata(parameters.get("metadata")),
-            auto_classify=bool(parameters.get("auto_classify", True)),
+            auto_classify=auto_classify,
         )
         resolved_type = (
-            memory_type if not parameters.get("auto_classify", True) else "自动分类"
+            memory_type if memory_type != "working" or not auto_classify else "自动分类"
         )
         return f"已添加记忆: {memory_id}\n记忆类型: {resolved_type}"
 

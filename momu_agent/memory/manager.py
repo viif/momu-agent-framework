@@ -62,13 +62,17 @@ class MemoryManager:
     ) -> str:
         """新增一条记忆并返回其 ID，可按内容自动分类与计算重要性。"""
         metadata = dict(metadata or {})
-        if auto_classify:
+        explicit_memory_type = memory_type != "working"
+        if auto_classify and not explicit_memory_type:
             # 优先基于内容和元数据自动决定记忆类型，并记录分类依据。
             memory_type, classification_source, classification_reasons = (
                 self._classify_memory_type(content, metadata)
             )
             metadata["classification_source"] = classification_source
             metadata["classification_reasons"] = classification_reasons
+        elif explicit_memory_type:
+            metadata["classification_source"] = "argument_explicit"
+            metadata["classification_reasons"] = [f"explicit_memory_type:{memory_type}"]
 
         if memory_type not in self.memory_types:
             raise ValueError(f"不支持的记忆类型: {memory_type}")
