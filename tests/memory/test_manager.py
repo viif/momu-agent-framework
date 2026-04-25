@@ -574,6 +574,81 @@ async def test_close_calls_all_memory_backends(manager: MemoryManager):
 
 
 @pytest.mark.asyncio
+async def test_auto_classifies_event_like_content_as_episodic(manager: MemoryManager):
+    memory_id = await manager.add_memory(
+        "我刚跑通了 MemoryTool 的 SimpleAgent 示例",
+    )
+
+    episodic_results = await manager.retrieve_memories(
+        "跑通 示例",
+        memory_types=["episodic"],
+        limit=5,
+    )
+
+    assert [memory.id for memory in episodic_results] == [memory_id]
+    assert episodic_results[0].metadata["classification_source"] == "content_rule"
+    assert (
+        "first_person_result" in episodic_results[0].metadata["classification_reasons"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_auto_classifies_session_metadata_as_episodic(manager: MemoryManager):
+    memory_id = await manager.add_memory(
+        "会议记录",
+        metadata={"session_id": "session-1"},
+    )
+
+    episodic_results = await manager.retrieve_memories(
+        "会议",
+        memory_types=["episodic"],
+        session_id="session-1",
+        limit=5,
+    )
+
+    assert [memory.id for memory in episodic_results] == [memory_id]
+    assert (
+        episodic_results[0].metadata["classification_source"] == "metadata_structural"
+    )
+    assert episodic_results[0].metadata["classification_reasons"] == ["session_id"]
+
+
+@pytest.mark.asyncio
+async def test_auto_classifies_knowledge_like_content_as_semantic(
+    manager: MemoryManager,
+):
+    memory_id = await manager.add_memory("Python async 的概念定义与使用方法")
+
+    semantic_results = await manager.retrieve_memories(
+        "概念定义",
+        memory_types=["semantic"],
+        limit=5,
+    )
+
+    assert [memory.id for memory in semantic_results] == [memory_id]
+    assert semantic_results[0].metadata["classification_source"] == "content_rule"
+    assert (
+        "knowledge_expression" in semantic_results[0].metadata["classification_reasons"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_auto_classifies_preference_like_content_as_working(
+    manager: MemoryManager,
+):
+    memory_id = await manager.add_memory("我平时喜欢喝燕麦拿铁，不另外加糖。")
+
+    working_memory = manager.memory_types["working"]
+    assert isinstance(working_memory, WorkingMemory)
+    working_results = await working_memory.get_all()
+    matched = [memory for memory in working_results if memory.id == memory_id]
+
+    assert len(matched) == 1
+    assert matched[0].metadata["classification_source"] == "default"
+    assert matched[0].metadata["classification_reasons"] == ["fallback_working"]
+
+
+@pytest.mark.asyncio
 async def test_close_continues_when_backend_fails(manager: MemoryManager):
     backends = list(manager.memory_types.values())
     close_mocks: list[AsyncMock] = []

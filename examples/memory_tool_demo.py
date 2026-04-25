@@ -62,7 +62,8 @@ async def demo_memory_with_agent(config: Config) -> None:
     questions = [
         "帮我记一下，我平时喜欢喝燕麦拿铁，不另外加糖。",
         "再帮我记一条今天发生的事：我刚跑通了 MemoryTool 的 SimpleAgent 示例。",
-        "我刚才提到的咖啡偏好是什么来着？",
+        "我平时喜欢喝什么咖啡？",
+        "今天发生了什么事？",
         "顺便看看现在记忆库里有多少内容。",
     ]
 

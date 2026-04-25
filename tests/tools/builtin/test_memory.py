@@ -100,6 +100,49 @@ class TestMemoryTool:
         )
 
     @pytest.mark.asyncio
+    async def test_search_retrieve_alias_maps_to_search(
+        self, memory_tool, mock_manager
+    ):
+        await memory_tool.run({"action": "retrieve", "query": "python"})
+
+        mock_manager.retrieve_memories.assert_awaited_once_with(
+            query="python",
+            memory_types=None,
+            limit=5,
+            importance_threshold=0.0,
+            score_threshold=None,
+            user_id=None,
+            session_id=None,
+            start_time=None,
+            end_time=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_search_type_alias_maps_to_memory_type(
+        self, memory_tool, mock_manager
+    ):
+        await memory_tool.run(
+            {"action": "search", "query": "python", "type": "episodic"}
+        )
+
+        mock_manager.retrieve_memories.assert_awaited_once_with(
+            query="python",
+            memory_types=["episodic"],
+            limit=5,
+            importance_threshold=0.0,
+            score_threshold=None,
+            user_id=None,
+            session_id=None,
+            start_time=None,
+            end_time=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_search_rejects_content_instead_of_query(self, memory_tool):
+        with pytest.raises(ToolException, match="请使用 query 参数，不要用 content"):
+            await memory_tool.run({"action": "search", "content": "python"})
+
+    @pytest.mark.asyncio
     async def test_search_empty_query_raises(self, memory_tool):
         with pytest.raises(ToolException, match="非空 query"):
             await memory_tool.run({"action": "search", "query": ""})
@@ -173,7 +216,7 @@ class TestMemoryTool:
 
     @pytest.mark.asyncio
     async def test_unknown_action_raises(self, memory_tool):
-        with pytest.raises(ToolException, match="不支持的 action"):
+        with pytest.raises(ToolException, match="如需检索记忆，请使用 action=search"):
             await memory_tool.run({"action": "summary"})
 
 

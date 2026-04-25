@@ -63,8 +63,12 @@ class MemoryManager:
         """新增一条记忆并返回其 ID，可按内容自动分类与计算重要性。"""
         metadata = dict(metadata or {})
         if auto_classify:
-            # 优先基于内容和元数据自动决定记忆类型。
-            memory_type = self._classify_memory_type(content, metadata)
+            # 优先基于内容和元数据自动决定记忆类型，并记录分类依据。
+            memory_type, classification_source, classification_reasons = (
+                self._classify_memory_type(content, metadata)
+            )
+            metadata["classification_source"] = classification_source
+            metadata["classification_reasons"] = classification_reasons
 
         if memory_type not in self.memory_types:
             raise ValueError(f"不支持的记忆类型: {memory_type}")
@@ -263,33 +267,105 @@ class MemoryManager:
         self,
         content: str,
         metadata: dict[str, Any] | None,
-    ) -> str:
-        """根据元数据与内容特征判定记忆类型。"""
+    ) -> tuple[str, str, list[str]]:
+        """根据元数据与内容特征判定记忆类型，并返回分类依据。"""
         if metadata:
             explicit_type = metadata.get("memory_type") or metadata.get("type")
             # 当元数据显式指定类型且已启用时，直接采用显式类型。
             if explicit_type in self.memory_types:
-                return explicit_type
+                return (
+                    str(explicit_type),
+                    "metadata_explicit",
+                    [f"explicit_type:{explicit_type}"],
+                )
             if metadata.get("concepts") or metadata.get("entities"):
-                return "semantic"
+                return "semantic", "metadata_structural", ["concepts_or_entities"]
             if metadata.get("session_id"):
-                return "episodic"
+                return "episodic", "metadata_structural", ["session_id"]
 
-        if self._is_episodic_content(content):
-            return "episodic"
-        if self._is_semantic_content(content):
-            return "semantic"
-        return "working"
+        episodic_score, episodic_reasons = self._score_episodic_content(content)
+        semantic_score, semantic_reasons = self._score_semantic_content(content)
 
-    def _is_episodic_content(self, content: str) -> bool:
-        """判断文本是否具备情景记忆特征。"""
-        episodic_keywords = ["昨天", "今天", "明天", "上次", "发生", "经历"]
-        return any(keyword in content for keyword in episodic_keywords)
+        if episodic_score >= semantic_score and episodic_score >= 2:
+            return "episodic", "content_rule", episodic_reasons
+        if semantic_score >= 2:
+            return "semantic", "content_rule", semantic_reasons
+        return "working", "default", ["fallback_working"]
 
-    def _is_semantic_content(self, content: str) -> bool:
-        """判断文本是否具备语义知识记忆特征。"""
-        semantic_keywords = ["定义", "概念", "规则", "知识", "原理", "方法"]
-        return any(keyword in content for keyword in semantic_keywords)
+    def _score_episodic_content(self, content: str) -> tuple[int, list[str]]:
+        """基于事件型信号为情景记忆打分。"""
+        text = content.strip()
+        if not text:
+            return 0, []
+
+        score = 0
+        reasons: list[str] = []
+
+        time_markers = ["今天", "昨天", "明天", "刚", "刚刚", "刚才", "这次", "上次"]
+        event_markers = [
+            "发生的事",
+            "经历",
+            "发生",
+            "遇到",
+            "做了",
+            "试了",
+            "完成了",
+            "跑通了",
+            "解决了",
+            "修复了",
+            "参加了",
+            "记录一下",
+            "记一条",
+        ]
+        result_markers = ["完成", "跑通", "成功", "失败", "解决", "修复", "通过"]
+
+        if any(marker in text for marker in time_markers):
+            score += 1
+            reasons.append("time_marker")
+        if any(marker in text for marker in event_markers):
+            score += 2
+            reasons.append("event_expression")
+        if "我" in text and any(marker in text for marker in result_markers):
+            score += 2
+            reasons.append("first_person_result")
+        elif "我" in text and any(
+            marker in text for marker in ["做", "试", "遇到", "参加", "完成", "跑通"]
+        ):
+            score += 1
+            reasons.append("first_person_action")
+
+        return score, reasons
+
+    def _score_semantic_content(self, content: str) -> tuple[int, list[str]]:
+        """基于知识型信号为语义记忆打分。"""
+        text = content.strip()
+        if not text:
+            return 0, []
+
+        score = 0
+        reasons: list[str] = []
+        semantic_markers = [
+            "定义",
+            "概念",
+            "规则",
+            "知识",
+            "原理",
+            "方法",
+            "是指",
+            "意味着",
+            "通常",
+            "一般",
+            "最佳实践",
+        ]
+
+        if any(marker in text for marker in semantic_markers):
+            score += 2
+            reasons.append("knowledge_expression")
+        if any(marker in text for marker in ["如何", "为什么", "可以分为", "规范"]):
+            score += 1
+            reasons.append("explanatory_expression")
+
+        return score, reasons
 
     def _calculate_importance(
         self,

@@ -260,8 +260,54 @@ async def test_forget_supports_importance_time_and_capacity_strategies(memory_co
     await working_memory.add(make_memory("m4", "mid 1", importance=0.4))
     await working_memory.add(make_memory("m5", "mid 2", importance=0.3))
     working_memory.max_capacity = 2
-
     forgotten = await working_memory.forget(strategy="capacity_based")
 
     assert forgotten == 1
     assert {memory.id for memory in await working_memory.get_all()} == {"m3", "m4"}
+
+
+@pytest.mark.asyncio
+async def test_retrieve_matches_chinese_preference_queries(working_memory, monkeypatch):
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name.startswith("sklearn"):
+            raise ImportError("sklearn unavailable")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    preferred = make_memory(
+        "m1",
+        "我平时喜欢喝燕麦拿铁，不另外加糖。",
+        importance=0.8,
+        user_id="u1",
+    )
+    unrelated = make_memory(
+        "m2",
+        "今天刚跑通了 MemoryTool 的 SimpleAgent 示例。",
+        importance=0.9,
+        user_id="u1",
+    )
+
+    await working_memory.add(preferred)
+    await working_memory.add(unrelated)
+
+    results = await working_memory.retrieve("我平时喜欢喝什么咖啡？", user_id="u1")
+
+    assert results
+    assert results[0].id == "m1"
+    assert results[0].metadata["relevance_score"] > 0
+
+
+@pytest.mark.asyncio
+async def test_retrieve_sets_relevance_score_for_cross_type_sorting(working_memory):
+    await working_memory.add(
+        make_memory("m1", "python async local notes", importance=0.5, user_id="u1")
+    )
+
+    results = await working_memory.retrieve("python async", user_id="u1")
+
+    assert results
+    assert "relevance_score" in results[0].metadata
+    assert results[0].metadata["relevance_score"] > 0

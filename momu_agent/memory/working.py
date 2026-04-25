@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -95,6 +96,10 @@ class WorkingMemory(Memory):
             if not filtered_memories:
                 return []
 
+            normalized_query = self._normalize_text(query)
+            query_terms = self._extract_terms(query)
+            query_char_ngrams = self._build_char_ngrams(normalized_query)
+
             vector_scores: dict[str, float] = {}
             try:
                 # 优先使用向量相似度；依赖不可用时回退到关键词匹配。
@@ -102,7 +107,10 @@ class WorkingMemory(Memory):
                 from sklearn.metrics.pairwise import cosine_similarity
 
                 documents = [memory.content for memory in filtered_memories]
-                vectorizer = TfidfVectorizer(stop_words=None, lowercase=True)
+                vectorizer = TfidfVectorizer(
+                    analyzer=self._tfidf_analyzer,
+                    lowercase=False,
+                )
                 doc_vectors = vectorizer.fit_transform(documents)
                 query_vector = vectorizer.transform([query])
                 similarities = cosine_similarity(query_vector, doc_vectors).flatten()
@@ -112,27 +120,22 @@ class WorkingMemory(Memory):
             except Exception:
                 vector_scores = {}
 
-            query_lower = query.lower()
             scored_memories: list[tuple[float, MemoryItem]] = []
 
             for memory in filtered_memories:
-                content_lower = memory.content.lower()
+                normalized_content = self._normalize_text(memory.content)
                 vector_score = vector_scores.get(memory.id, 0.0)
-
-                keyword_score = 0.0
-                if query_lower in content_lower:
-                    keyword_score = len(query_lower) / len(content_lower)
-                else:
-                    query_words = set(query_lower.split())
-                    content_words = set(content_lower.split())
-                    union = query_words.union(content_words)
-                    intersection = query_words.intersection(content_words)
-                    if union and intersection:
-                        keyword_score = len(intersection) / len(union) * 0.8
+                keyword_score = self._keyword_score(
+                    normalized_query=normalized_query,
+                    query_terms=query_terms,
+                    query_char_ngrams=query_char_ngrams,
+                    content=memory.content,
+                    normalized_content=normalized_content,
+                )
 
                 if vector_score > 0:
                     # 语义匹配可用时，以语义为主、关键词为辅做融合。
-                    base_relevance = vector_score * 0.7 + keyword_score * 0.3
+                    base_relevance = vector_score * 0.65 + keyword_score * 0.35
                 else:
                     # 语义匹配不可用时，仅使用关键词得分。
                     base_relevance = keyword_score
@@ -146,6 +149,7 @@ class WorkingMemory(Memory):
                 final_score = base_relevance * importance_weight
 
                 if final_score > 0:
+                    memory.metadata["relevance_score"] = final_score
                     scored_memories.append((final_score, memory))
 
             scored_memories.sort(key=lambda item: item[0], reverse=True)
@@ -352,6 +356,99 @@ class WorkingMemory(Memory):
                 f"🧠 遗忘机制（{strategy}）移除了 {forgotten_count} 条记忆"
             )
         return forgotten_count
+
+    def _normalize_text(self, text: str) -> str:
+        """归一化文本，尽量削弱问句噪音对匹配的影响。"""
+        normalized = text.lower().strip()
+        normalized = re.sub(r"[\s　]+", " ", normalized)
+        normalized = re.sub(
+            r"[？?！!。，“”‘’、,.:;；：()（）\[\]{}\"'`~]+", " ", normalized
+        )
+        for noise in [
+            "请问",
+            "再帮我",
+            "帮我",
+            "一下子",
+            "一下",
+            "什么",
+            "哪些",
+            "多少",
+            "吗",
+            "呢",
+            "呀",
+            "啊",
+            "吧",
+            "请",
+        ]:
+            normalized = normalized.replace(noise, " ")
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized.strip()
+
+    def _extract_terms(self, text: str) -> set[str]:
+        """提取中英文混合检索词，兼顾中文片段与英文单词。"""
+        normalized = self._normalize_text(text)
+        terms = set(re.findall(r"[a-z0-9]+|[一-鿿]{2,}", normalized))
+
+        expanded_terms: set[str] = set(terms)
+        for term in list(terms):
+            if re.fullmatch(r"[一-鿿]{4,}", term):
+                expanded_terms.update(
+                    term[index : index + 2]
+                    for index in range(len(term) - 1)
+                    if len(term[index : index + 2]) == 2
+                )
+        return expanded_terms
+
+    def _build_char_ngrams(self, normalized_text: str, n: int = 2) -> set[str]:
+        """构造字符 n-gram，用于兜底处理中短中文短句。"""
+        compact = normalized_text.replace(" ", "")
+        if not compact:
+            return set()
+        if len(compact) < n:
+            return {compact}
+        return {compact[index : index + n] for index in range(len(compact) - n + 1)}
+
+    def _tfidf_analyzer(self, text: str) -> list[str]:
+        """为 TF-IDF 提供适合中英文混合内容的分词结果。"""
+        normalized = self._normalize_text(text)
+        tokens = list(self._extract_terms(normalized))
+        tokens.extend(sorted(self._build_char_ngrams(normalized)))
+        return tokens
+
+    def _keyword_score(
+        self,
+        *,
+        normalized_query: str,
+        query_terms: set[str],
+        query_char_ngrams: set[str],
+        content: str,
+        normalized_content: str,
+    ) -> float:
+        """计算关键词相关性分数。"""
+        if not normalized_query or not normalized_content:
+            return 0.0
+
+        exact_score = 0.0
+        if normalized_query in normalized_content:
+            exact_score = min(
+                1.0, len(normalized_query) / max(len(normalized_content), 1)
+            )
+
+        content_terms = self._extract_terms(content)
+        term_score = 0.0
+        if query_terms and content_terms:
+            union = query_terms.union(content_terms)
+            intersection = query_terms.intersection(content_terms)
+            if union and intersection:
+                term_score = len(intersection) / len(union)
+
+        content_char_ngrams = self._build_char_ngrams(normalized_content)
+        char_ngram_score = 0.0
+        if query_char_ngrams and content_char_ngrams:
+            overlap = query_char_ngrams.intersection(content_char_ngrams)
+            char_ngram_score = len(overlap) / len(query_char_ngrams)
+
+        return max(exact_score, term_score * 0.85, char_ngram_score * 0.75)
 
     def _calculate_priority(self, memory: MemoryItem) -> float:
         """计算记忆优先级。"""

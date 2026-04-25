@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
@@ -24,7 +25,12 @@ class MemoryTool(Tool):
         """初始化记忆工具并配置底层记忆管理器。"""
         super().__init__(
             name="memory",
-            description="基于内置记忆系统的记忆工具，支持添加、检索、更新、删除和统计。",
+            description=(
+                "基于内置记忆系统的统一记忆工具，支持添加、检索、更新、删除、统计、遗忘与清空；"
+                "其中 working(工作记忆，短期会话上下文，容量有限且会自动清理)、"
+                "episodic(情景记忆，记录具体事件与交互经历，可按 session_id 和时间检索)、"
+                "semantic(语义记忆，沉淀概念、规则、原理与实体关系等稳定知识)。"
+            ),
         )
         self.logger = get_logger(__name__)
         enabled_types = memory_types or ["working", "episodic", "semantic"]
@@ -38,28 +44,30 @@ class MemoryTool(Tool):
 
     async def run(self, parameters: dict[str, Any]) -> str:
         """根据 action 分发并执行对应记忆操作。"""
-        action = str(parameters.get("action", "")).strip()
+        normalized = self._normalize_parameters(parameters)
+        action = str(normalized.get("action", "")).strip()
         if not action:
             raise ToolException("必须提供 action 参数")
 
         # 显式分支保证 action 与处理方法一一对应，便于排查与扩展。
         if action == "add":
-            return await self._add(parameters)
+            return await self._add(normalized)
         if action == "search":
-            return await self._search(parameters)
+            return await self._search(normalized)
         if action == "update":
-            return await self._update(parameters)
+            return await self._update(normalized)
         if action == "remove":
-            return await self._remove(parameters)
+            return await self._remove(normalized)
         if action == "stats":
-            return await self._stats(parameters)
+            return await self._stats(normalized)
         if action == "forget":
-            return await self._forget(parameters)
+            return await self._forget(normalized)
         if action == "clear":
-            return await self._clear(parameters)
+            return await self._clear(normalized)
 
         raise ToolException(
-            f"不支持的 action: {action}。可用 action: add, search, update, remove, stats, forget, clear"
+            f"不支持的 action: {action}。可用 action: add, search, update, remove, stats, forget, clear；"
+            "如需检索记忆，请使用 action=search"
         )
 
     def get_parameters(self) -> list[ToolParameter]:
@@ -68,19 +76,22 @@ class MemoryTool(Tool):
             ToolParameter(
                 name="action",
                 type="string",
-                description="操作类型：add、search、update、remove、stats、forget、clear",
+                description=(
+                    "操作类型: add(添加), search(检索), update(更新), remove(删除), "
+                    "stats(统计), forget(遗忘), clear(清空)；检索请使用 search，retrieve 仅作兼容别名"
+                ),
                 required=True,
             ),
             ToolParameter(
                 name="content",
                 type="string",
-                description="记忆内容",
+                description="记忆内容；在 add 且 auto_classify=True 时，内容会参与 working/episodic/semantic 的自动分类",
                 required=False,
             ),
             ToolParameter(
                 name="query",
                 type="string",
-                description="检索查询",
+                description="检索查询；search 时请使用 query，不要用 content 代替",
                 required=False,
             ),
             ToolParameter(
@@ -92,14 +103,24 @@ class MemoryTool(Tool):
             ToolParameter(
                 name="memory_type",
                 type="string",
-                description="单个记忆类型",
+                description=(
+                    "单个记忆类型: working(工作记忆，短期会话上下文，容量有限且会自动清理), "
+                    "episodic(情景记忆，记录具体事件与交互经历，适合按 session_id 和时间检索), "
+                    "semantic(语义记忆，沉淀概念、规则、原理与实体关系等稳定知识)；"
+                    "add 时用于指定写入类型，search 时可用于单类型过滤；"
+                    "请优先使用字段名 memory_type，type 仅作兼容别名；"
+                    "当 auto_classify=True 时，最终类型会按内容和元数据自动判定"
+                ),
                 required=False,
                 default="working",
             ),
             ToolParameter(
                 name="memory_types",
                 type="array",
-                description="多个记忆类型",
+                description=(
+                    "多个记忆类型过滤列表，可选 working(工作记忆)、episodic(情景记忆)、"
+                    "semantic(语义记忆)，用于联合检索时限制搜索范围；types 仅作兼容别名"
+                ),
                 required=False,
             ),
             ToolParameter(
@@ -111,13 +132,20 @@ class MemoryTool(Tool):
             ToolParameter(
                 name="metadata",
                 type="object",
-                description="记忆元数据",
+                description=(
+                    "记忆元数据，可用于显式指定类型或辅助自动分类；如 memory_type/type 可直接指定类型，"
+                    "concepts/entities 更偏 semantic，session_id 更偏 episodic"
+                ),
                 required=False,
             ),
             ToolParameter(
                 name="auto_classify",
                 type="boolean",
-                description="是否自动分类记忆类型",
+                description=(
+                    "是否自动分类记忆类型；开启后优先采用 metadata 中显式指定的 memory_type/type，"
+                    "其次 concepts/entities 偏 semantic、session_id 偏 episodic，"
+                    "内容像事件经历偏 episodic，像定义/概念/规则/知识/原理/方法偏 semantic，其余默认 working"
+                ),
                 required=False,
                 default=True,
             ),
@@ -137,7 +165,7 @@ class MemoryTool(Tool):
             ToolParameter(
                 name="session_id",
                 type="string",
-                description="情景记忆 session_id 过滤条件",
+                description="情景记忆 session_id 过滤条件，主要用于 episodic 记忆限定同一会话或交互过程",
                 required=False,
             ),
             ToolParameter(
@@ -211,6 +239,10 @@ class MemoryTool(Tool):
     async def _search(self, parameters: dict[str, Any]) -> str:
         """按条件检索记忆并格式化返回结果。"""
         query = str(parameters.get("query", "")).strip()
+        if not query and self._as_optional_str(parameters.get("content")):
+            raise ToolException(
+                "search 需要提供非空 query；检索时请使用 query 参数，不要用 content"
+            )
         if not query:
             raise ToolException("search 需要提供非空 query")
 
@@ -317,6 +349,25 @@ class MemoryTool(Tool):
     async def close(self) -> None:
         """释放记忆管理器占用的后端资源。"""
         await self.memory_manager.close()
+
+    def _normalize_parameters(self, parameters: dict[str, Any]) -> dict[str, Any]:
+        """兼容高频别名参数，降低 LLM 调用时的格式误差。"""
+        normalized = dict(parameters)
+
+        action = self._as_optional_str(normalized.get("action"))
+        if action == "retrieve":
+            normalized["action"] = "search"
+
+        if "type" in normalized and "memory_type" not in normalized:
+            normalized["memory_type"] = normalized.pop("type")
+        if "types" in normalized and "memory_types" not in normalized:
+            normalized["memory_types"] = normalized.pop("types")
+
+        metadata = normalized.get("metadata")
+        if isinstance(metadata, Mapping):
+            normalized["metadata"] = dict(metadata)
+
+        return normalized
 
     def _get_positive_int(self, value: Any, default: int, field_name: str) -> int:
         """解析正整数参数，不合法时抛出工具异常。"""
