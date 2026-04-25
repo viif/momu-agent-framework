@@ -84,6 +84,13 @@ class ToolRegistry:
             f"执行工具 '{name}' 时发生未知异常: {str(error)}"
         ) from error
 
+    def _summarize_for_log(self, value: Any, max_length: int = 200) -> str:
+        """生成用于日志的摘要，避免输出过长。"""
+        summary = repr(value)
+        if len(summary) > max_length:
+            return f"{summary[:max_length]}..."
+        return summary
+
     async def execute_tool(self, name: str, input_data: str | dict[str, Any]) -> str:
         """
         执行工具
@@ -98,6 +105,8 @@ class ToolRegistry:
         Raises:
             ToolException: 工具执行失败或工具不存在
         """
+        self.logger.debug(f"🔧 准备执行工具 '{name}'，输入参数: {input_data!r}")
+
         # 优先查找Tool对象
         if name in self._tools:
             tool = self._tools[name]
@@ -108,10 +117,20 @@ class ToolRegistry:
                     if isinstance(input_data, dict)
                     else {"input": input_data}
                 )
-                return await tool.run(params)
-            except ToolException:
+                result = await tool.run(params)
+                self.logger.debug(
+                    f"🔧 工具 '{name}' 执行成功，结果摘要: {self._summarize_for_log(result)}"
+                )
+                return result
+            except ToolException as e:
+                self.logger.debug(
+                    f"🔧 工具 '{name}' 执行失败，异常摘要: {self._summarize_for_log(e)}"
+                )
                 raise
             except Exception as e:
+                self.logger.debug(
+                    f"🔧 工具 '{name}' 执行失败，异常摘要: {self._summarize_for_log(e)}"
+                )
                 self._raise_unknown_exception(name, e)
 
         # 查找函数工具
@@ -129,11 +148,20 @@ class ToolRegistry:
 
                 result = func(function_input)
                 if inspect.isawaitable(result):
-                    return await result
+                    result = await result
+                self.logger.debug(
+                    f"🔧 工具 '{name}' 执行成功，结果摘要: {self._summarize_for_log(result)}"
+                )
                 return result
-            except ToolException:
+            except ToolException as e:
+                self.logger.debug(
+                    f"🔧 工具 '{name}' 执行失败，异常摘要: {self._summarize_for_log(e)}"
+                )
                 raise
             except Exception as e:
+                self.logger.debug(
+                    f"🔧 工具 '{name}' 执行失败，异常摘要: {self._summarize_for_log(e)}"
+                )
                 self._raise_unknown_exception(name, e)
 
         else:
