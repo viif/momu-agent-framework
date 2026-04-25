@@ -47,10 +47,6 @@ async def demo_basic_chat(config: Config):
     response = await agent.run("你好！请用一句话介绍一下你自己。")
     print(f"Agent: {response}\n")
 
-    # 多轮对话：历史记录会自动保留
-    response = await agent.run("上一个问题我问了什么？")
-    print(f"Agent: {response}\n")
-
 
 # ---------- 示例 2：带工具调用的对话 ----------
 async def demo_with_tools(config: Config):

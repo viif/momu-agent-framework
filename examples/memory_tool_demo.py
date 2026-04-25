@@ -60,10 +60,10 @@ async def demo_memory_with_agent(config: Config) -> None:
     print(f"使用 user_id: {demo_user_id}\n")
 
     questions = [
-        "请把这条信息加入记忆：用户喜欢燕麦拿铁，不加糖。要求 memory_type=working，auto_classify=false。",
-        "再添加一条情景记忆：今天完成了 MemoryTool 的 SimpleAgent 示例。要求 memory_type=episodic，metadata 中包含 session_id=demo-session-1，auto_classify=false。",
-        "请检索与“燕麦拿铁”相关的记忆，limit=5。",
-        "请查询当前记忆统计信息。",
+        "帮我记一下，我平时喜欢喝燕麦拿铁，不另外加糖。",
+        "再帮我记一条今天发生的事：我刚跑通了 MemoryTool 的 SimpleAgent 示例。",
+        "我刚才提到的咖啡偏好是什么来着？",
+        "顺便看看现在记忆库里有多少内容。",
     ]
 
     for question in questions:

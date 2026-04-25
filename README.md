@@ -91,9 +91,7 @@ async def main() -> None:
     )
 
     print(await agent.run("什么是 GIL？"))
-    print(await agent.run("它对多线程爬虫有什么具体影响？"))
-
-    async for chunk in agent.stream_run("用一句话总结以上内容。"):
+    async for chunk in agent.stream_run("介绍 Python 异步编程的最佳实践。"):
         print(chunk, end="", flush=True)
 
 

@@ -50,8 +50,6 @@ class SimpleAgent(Agent):
     def _build_messages(self, input_text: str) -> list[dict[str, str]]:
         """构建发送给 LLM 的消息列表"""
         messages = [{"role": "system", "content": self._get_enhanced_system_prompt()}]
-        for msg in self._history:
-            messages.append({"role": msg.role, "content": msg.content})
         messages.append({"role": "user", "content": input_text})
         return messages
 
