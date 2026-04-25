@@ -107,7 +107,9 @@ class TerminalTool(Tool):
             name="terminal",
             description=(
                 "命令行工具 - 执行安全的文件系统与文本处理命令"
-                "（ls, cat, grep, head, tail等）"
+                "（ls, cat, grep, head, tail等）。"
+                "参数：command（必填，要执行的白名单命令）；"
+                "timeout（可选，命令超时时间，单位秒，默认使用工具配置值）。"
             ),
         )
         self.logger = get_logger(__name__)

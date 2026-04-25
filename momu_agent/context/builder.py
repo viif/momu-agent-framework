@@ -239,7 +239,7 @@ class ContextBuilder:
             ]
             recent_history = user_assistant_history[-6:]
             history_text = "\n".join(
-                [f"[{msg.role}] {msg.content[:500]}" for msg in recent_history]
+                [self._format_history_message(msg) for msg in recent_history]
             )
             packet = ContextPacket(
                 content=history_text,
@@ -263,6 +263,26 @@ class ContextBuilder:
             sum(packet.token_count for packet in packets),
         )
         return packets
+
+    @staticmethod
+    def _extract_user_query_from_history(content: str) -> str | None:
+        marker = "用户问题："
+        if marker not in content:
+            return None
+
+        extracted = content.split(marker, maxsplit=1)[1]
+        next_section_index = extracted.find("\n[")
+        if next_section_index != -1:
+            extracted = extracted[:next_section_index]
+
+        extracted = extracted.strip()
+        return extracted or None
+
+    def _format_history_message(self, msg: Message) -> str:
+        content = msg.content
+        if msg.role == "user":
+            content = self._extract_user_query_from_history(msg.content) or msg.content
+        return f"[{msg.role}] {content[:500]}"
 
     def _select(
         self, packets: list[ContextPacket], user_query: str

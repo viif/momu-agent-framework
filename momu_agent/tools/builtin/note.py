@@ -66,7 +66,14 @@ class NoteTool(Tool):
     ) -> None:
         super().__init__(
             name="note",
-            description="结构化笔记工具，支持创建、读取、更新、删除、列表、搜索与摘要",
+            description=(
+                "结构化笔记工具，支持创建、读取、更新、删除、列表、搜索与摘要。"
+                "参数：action（必填，create/read/update/delete/list/search/summary）；"
+                "title（create/update 时可用，笔记标题）；content（create/update 时可用，笔记内容）；"
+                "note_type（可选，task_state/conclusion/blocker/action/reference/general）；"
+                "tags（可选，标签列表）；note_id（read/update/delete 时必需，笔记 ID）；"
+                "query（search 时必需，搜索关键词）；limit（可选，返回结果数量限制，默认 10）。"
+            ),
         )
         self.logger = get_logger(__name__)
         self.workspace = Path(workspace)
@@ -517,11 +524,17 @@ class NoteTool(Tool):
 
     def _format_note(self, note: dict[str, Any], compact: bool = False) -> str:
         if compact:
-            preview = note["content"][:100]
-            if len(note["content"]) > 100:
+            content = note["content"]
+            preview = content[:100]
+            is_truncated = len(content) > 100
+            if is_truncated:
                 preview += "..."
+            truncation_notice = "（内容预览，已截断）" if is_truncated else "（内容预览）"
             return (
-                f"[{note['type']}] {note['title']}\nID: {note['id']}\n内容: {preview}"
+                f"[{note['type']}] {note['title']}\n"
+                f"ID: {note['id']}\n"
+                f"内容: {preview}\n"
+                f"说明: {truncation_notice}"
             )
 
         lines = [

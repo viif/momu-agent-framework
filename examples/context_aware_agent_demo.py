@@ -112,8 +112,8 @@ async def demo_context_aware_agent(config: Config) -> None:
     )
 
     questions = [
-        "帮我看看当前目录里有哪些 demo，并对所有demo的内容做一个简要总结。",
-        "把你上一轮的总结完整记录成一条任务状态笔记。",
+        "帮我看看当前目录里有哪些文件，并做一个关于这些文件内容的总结笔记。",
+        "告诉我文件内容总结笔记中的内容。",
     ]
 
     for question in questions:

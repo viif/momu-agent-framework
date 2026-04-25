@@ -66,6 +66,63 @@ async def test_gather_includes_system_history_and_additional_packets():
 
 
 @pytest.mark.asyncio
+async def test_gather_extracts_only_user_query_from_structured_user_history():
+    llm = AsyncMock()
+    builder = ContextBuilder(llm=llm)
+    history = [
+        Message(
+            content=(
+                "[Task]\n用户问题：之前的问题\n\n"
+                "[Output]\n1. 结论\n2. 依据"
+            ),
+            role="user",
+        ),
+        Message(content="之前的回答", role="assistant"),
+    ]
+
+    packets = await builder._gather(
+        user_query="hello",
+        conversation_history=history,
+        system_instructions=None,
+        additional_packets=[],
+    )
+
+    history_packet = next(p for p in packets if p.metadata.get("type") == "history")
+    assert "[user] 之前的问题" in history_packet.content
+    assert "[Task]" not in history_packet.content
+    assert "[Output]" not in history_packet.content
+    assert "[assistant] 之前的回答" in history_packet.content
+
+
+@pytest.mark.asyncio
+async def test_gather_falls_back_to_original_user_history_when_extraction_is_empty():
+    llm = AsyncMock()
+    builder = ContextBuilder(llm=llm)
+    history = [
+        Message(content="[Task]\n用户问题：\n[Output]\n1. 结论", role="user"),
+    ]
+
+    packets = await builder._gather(
+        user_query="hello",
+        conversation_history=history,
+        system_instructions=None,
+        additional_packets=[],
+    )
+
+    history_packet = next(p for p in packets if p.metadata.get("type") == "history")
+    assert history_packet.content == "[user] [Task]\n用户问题：\n[Output]\n1. 结论"
+
+
+def test_extract_user_query_from_history_returns_none_for_plain_text():
+    assert ContextBuilder._extract_user_query_from_history("普通问题") is None
+
+
+def test_extract_user_query_from_history_returns_query_only_for_structured_text():
+    content = "[Task]\n用户问题：如何修复\n\n[Evidence]\n引用"
+    assert ContextBuilder._extract_user_query_from_history(content) == "如何修复"
+
+
+@pytest.mark.asyncio
 async def test_gather_calls_memory_and_rag_with_async_payloads():
     llm = AsyncMock()
     memory_tool = AsyncMock()
