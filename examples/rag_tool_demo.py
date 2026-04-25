@@ -58,10 +58,10 @@ async def demo_rag_with_agent(config: Config) -> None:
 
     print(f"使用命名空间: {namespace}\n")
 
-    document_path = Path(__file__).resolve().parent / "docs4rag" / "README_v0.2.0.pdf"
+    document_path = Path(__file__).resolve().parent / "docs4rag" / "README_v0.2.0.md"
 
     questions = [
-        f"我准备把项目说明文档接入知识库，先帮我导入这个 PDF：{document_path.as_posix()}。",
+        f"我准备把项目说明文档接入知识库，先帮我导入这个 Markdown 文件：{document_path.as_posix()}。",
         "我想快速了解这个框架有哪些核心能力，你先从知识库里帮我检索最相关的内容。",
         "如果我是第一次接触这个项目，你基于知识库用简短的话介绍一下它的定位和主要特性。",
         "顺便看一下当前知识库的统计信息。",

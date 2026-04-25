@@ -30,6 +30,12 @@ class RAGTool(Tool):
             name="rag",
             description=(
                 "基于本地知识库的 RAG 工具，支持文档入库、检索、问答和统计。"
+                "常用参数：action 可选 add_document、add_text、search、ask、stats；"
+                "add_document 使用 file_path 导入文件；add_text 使用 text 导入文本，可选 document_id 指定文档 ID；"
+                "search/ask 使用 query 或 question 提供检索问题，可通过 namespace 指定知识库、limit 控制返回数量、"
+                "score_threshold 过滤最低相似度；chunk_size 与 chunk_overlap 控制切分；"
+                "ask 额外支持 max_chars 限制注入上下文长度；enable_mqe、mqe_expansions、enable_hyde、"
+                "candidate_pool_multiplier 用于控制增强检索策略。"
                 "检索策略遵循“由简入繁”原则：默认优先使用基础检索；"
                 "仅在基础检索结果不足或查询复杂模糊时，再尝试启用多查询扩展（MQE）或假设文档嵌入（HyDE）策略。"
             ),
