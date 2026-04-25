@@ -529,7 +529,9 @@ class NoteTool(Tool):
             is_truncated = len(content) > 100
             if is_truncated:
                 preview += "..."
-            truncation_notice = "（内容预览，已截断）" if is_truncated else "（内容预览）"
+            truncation_notice = (
+                "（内容预览，已截断）" if is_truncated else "（内容预览）"
+            )
             return (
                 f"[{note['type']}] {note['title']}\n"
                 f"ID: {note['id']}\n"

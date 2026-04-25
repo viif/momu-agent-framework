@@ -71,10 +71,7 @@ async def test_gather_extracts_only_user_query_from_structured_user_history():
     builder = ContextBuilder(llm=llm)
     history = [
         Message(
-            content=(
-                "[Task]\n用户问题：之前的问题\n\n"
-                "[Output]\n1. 结论\n2. 依据"
-            ),
+            content=("[Task]\n用户问题：之前的问题\n\n[Output]\n1. 结论\n2. 依据"),
             role="user",
         ),
         Message(content="之前的回答", role="assistant"),
