@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，提供 Agent、工具系统、记忆系统、存储层、RAG、上下文工程能力和 OpenAI 兼容 LLM 接入能力。
+`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，提供 Agent、工具系统、记忆系统、存储层、RAG、上下文工程能力、OpenAI 兼容 LLM 接入能力，以及基于 stdio 的 MCP 客户端与远程工具注册能力。
 
 ## 包结构
 
@@ -17,7 +17,7 @@ momu_agent/
 │   └── message.py      # 消息数据结构
 ├── tools/              # 工具系统
 │   ├── base.py         # Tool 抽象基类、ToolParameter（Tool.run 为 async）
-│   ├── registry.py     # ToolRegistry（execute_tool 为 async，支持 Tool 对象与函数两种注册方式）
+│   ├── registry.py     # ToolRegistry（支持 Tool、函数工具与 MCP Client 注册）
 │   ├── chain.py        # ChainStep / ToolChain / ToolChainManager（顺序工具链）
 │   ├── executor.py     # 异步并发工具执行器
 │   └── builtin/        # 内置工具
@@ -49,6 +49,9 @@ momu_agent/
 ├── rag/                # RAG 管线与文档处理
 │   ├── document.py     # 文档与切分
 │   └── pipeline.py     # 检索、索引、排序与聚合
+├── mcp/                # MCP 集成
+│   ├── client.py       # MCPClient（stdio 异步客户端）
+│   └── tool_adapter.py # MCPToolAdapter（远程工具适配器）
 └── utils/
     ├── config.py       # 配置管理（从 .env 加载）
     ├── embedding.py    # 向量嵌入辅助
@@ -70,6 +73,7 @@ uv sync --all-extras
 uv sync --extra search
 uv sync --extra memory
 uv sync --extra rag
+uv sync --extra mcp
 
 # 运行示例（Windows 下建议保留 UTF-8 前置参数）
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/simple_agent_demo.py
@@ -79,10 +83,10 @@ PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/reflection_agent_demo
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/rag_tool_demo.py
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/memory_tool_demo.py
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/context_aware_agent_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/mcp_client_demo.py
 
 # 运行测试
 uv run pytest
-uv run pytest tests/agents/test_simple_agent.py
 uv run pytest tests/context/test_builder.py
 
 # 检查代码风格（不修改）
@@ -112,12 +116,16 @@ cp .env.example .env
 
 可选环境变量：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`、`EMBED_MODEL_NAME`。
 
+说明：MCP 本身不依赖 `.env` 中的专用变量，通常通过代码中的 stdio 启动命令连接外部 MCP Server。
+
 ## 依赖与扩展
 
 - 核心依赖包含 `colorama`、`openai`、`pydantic`、`python-dotenv`、`tiktoken`
-- 可选扩展包含 `search`、`memory`、`rag`
+- 可选扩展包含 `search`、`memory`、`rag`、`mcp`
+- `search` 额外依赖 `serpapi`、`tavily-python`
 - `memory` 额外依赖 `aiosqlite`、`chromadb`、`kuzu`、`scikit-learn`、`sentence-transformers`、`spacy`
 - `rag` 额外依赖 `aiosqlite`、`chromadb`、`markitdown`、`sentence-transformers`
+- `mcp` 额外依赖 `mcp`
 
 ## 异步约定
 
@@ -127,6 +135,8 @@ cp .env.example .env
 - `ToolRegistry.execute_tool()` 为 `async` 方法；Tool 对象调用与函数工具调用统一走异步执行路径
 - `ToolChain.execute()` / `ToolChainManager.execute_chain()` 为 `async` 方法
 - `ContextBuilder.build()` 为 `async` 方法
+- `MCPClient.connect()`、`list_tools()`、`call_tool()`、`close()` 均为 `async` 方法
+- 远程 MCP 工具通过 `ToolRegistry.register_mcp_client()` 注册后，以 `client_name.tool_name` 形式暴露
 - 示例和脚本入口使用 `asyncio.run(main())`
 - 测试使用 pytest-asyncio，配置 `asyncio_mode = "auto"`，async 测试函数无需额外标注
 
@@ -158,3 +168,4 @@ cp .env.example .env
 CI 在推送/PR 到 `main` 分支时触发，分两个任务：
 - `lint`：Python 3.13 环境下执行 Ruff 检查与格式检查
 - `test`：在 Python 3.11、3.12、3.13 上安装全部扩展依赖并运行 pytest（含 sentence-transformers 缓存与 CPU 版 torch 安装）
+

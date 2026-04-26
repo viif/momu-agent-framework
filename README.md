@@ -1,18 +1,19 @@
 # momu-agent-framework
 
-参考 HelloAgents 实现的智能体框架，提供 Agent、工具系统、记忆系统、RAG、上下文工程与 OpenAI 兼容 LLM 接入能力。
+参考 HelloAgents 实现的智能体框架，提供 Agent、工具系统、记忆系统、RAG、上下文工程、MCP 集成与 OpenAI 兼容 LLM 接入能力。
 
-## 🚀 特性
+## 特性
 
-- **全异步设计**：`Agent.run()`、工具执行主路径、工具链与上下文构建均为 `async`
+- **全异步设计**：`Agent.run()`、工具执行主路径、工具链、上下文构建和 MCP 客户端均为 `async`
 - **Agent 体系**：抽象基类 `Agent` + 四种开箱即用 Agent：`SimpleAgent`、`ReActAgent`、`PlanSolveAgent`、`ReflectionAgent`
-- **工具系统**：`ToolRegistry` 统一管理工具，支持 `Tool` 对象、同步函数和异步函数注册
+- **工具系统**：`ToolRegistry` 统一管理工具，支持 `Tool` 对象、同步函数、异步函数和远程 MCP 工具注册
 - **工具链与并发**：`ToolChain` / `ToolChainManager` 顺序编排，`ToolExecutor` 并发执行
 - **流式输出**：`SimpleAgent.stream_run()` 支持逐段异步输出
 - **内置工具**：`CalculatorTool`、`SearchTool`、`RAGTool`、`MemoryTool`、`NoteTool`、`TerminalTool`
 - **上下文工程**：`ContextBuilder` 实现 GSSC（Gather-Select-Structure-Compress）流程
 - **记忆系统**：`WorkingMemory`、`EpisodicMemory`、`SemanticMemory` 统一管理
 - **RAG 能力**：支持文本/文档入库、检索与基于上下文问答
+- **MCP 集成**：`MCPClient` 可通过 stdio 连接 MCP Server，并通过 `register_mcp_client()` 将远程工具接入 Agent
 - **OpenAI 兼容**：`LLM` 可接入任何兼容 OpenAI 接口的模型服务
 
 ## ⬇️ 安装
@@ -31,6 +32,7 @@ uv sync
 uv sync --extra search
 uv sync --extra memory
 uv sync --extra rag
+uv sync --extra mcp
 ```
 
 ### 安装全部扩展
@@ -108,6 +110,7 @@ uv run python examples/reflection_agent_demo.py
 uv run python examples/memory_tool_demo.py
 uv run python examples/rag_tool_demo.py
 uv run python examples/context_aware_agent_demo.py
+uv run python examples/mcp_client_demo.py
 ```
 
 ## 📂 目录结构
@@ -123,6 +126,7 @@ momu_agent/
 ├── memory/             # working/episodic/semantic + manager
 ├── storage/            # document/vector/graph 存储
 ├── rag/                # 文档处理与检索管线
+├── mcp/                # MCPClient / MCPToolAdapter
 └── utils/              # config/logger/embedding 等辅助模块
 ```
 
@@ -139,7 +143,7 @@ uv run ruff format .
 
 CI 在 `main` 的 push/PR 上运行：
 - `lint`：Python 3.13 + Ruff 检查
-- `test`：Python 3.11 / 3.12 / 3.13 运行 pytest（含 sentence-transformers 缓存与 CPU 版 torch 安装）
+- `test`：Python 3.11 / 3.12 / 3.13 安装全部扩展依赖并运行 pytest（含 sentence-transformers 缓存与 CPU 版 torch 安装）
 
 ## 📚 参考
 
@@ -147,4 +151,4 @@ CI 在 `main` 的 push/PR 上运行：
 
 ## 🙏 致谢
 
-感谢 Datawhale 提供的[《HelloAgents》](https://github.com/datawhalechina/hello-agents)教程。
+感谢 Datawhale 提供的 [《HelloAgents》](https://github.com/datawhalechina/hello-agents) 教程。
