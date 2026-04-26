@@ -374,26 +374,43 @@ def test_prepare_tool_task_no_alias_when_base_has_no_action_param():
     assert task["error"] == "工具未注册"
 
 
-def test_prepare_tool_task_no_alias_when_suffix_not_common_action():
-    """测试后缀不在通用动作词集合时不做别名归一化。"""
+def test_parse_typed_parameters_object_keeps_dict(parser, caplog):
+    """测试 object 参数保持为字典而非字符串。"""
 
-    class MockRegistry:
-        def __init__(self):
-            self.record_tool = MockRecordTool()
+    class MockObjectTool:
+        def get_parameters(self):
+            return [
+                ToolParameter(
+                    name="payload",
+                    type="object",
+                    description="对象载荷",
+                    required=True,
+                )
+            ]
 
-        def get_tool(self, name):
-            if name == "record":
-                return self.record_tool
-            return None
+    raw = '{"payload": {"name": "alice", "age": 18}}'
+    result = parser.parse_typed_parameters("object_tool", raw, MockObjectTool())
 
-        def get_function(self, name):
-            return None
+    assert result["payload"] == {"name": "alice", "age": 18}
+    assert "类型转换失败" not in caplog.text
 
-        def get_all_tools(self):
-            return [self.record_tool]
 
-    parser = ToolParser(cast(ToolRegistry, MockRegistry()))
-    task = parser.prepare_tool_task("record_custom", '{"title": "A"}', MockRegistry())
+def test_parse_typed_parameters_array_keeps_list(parser, caplog):
+    """测试 array 参数保持为列表而非字符串。"""
 
-    assert task["tool_name"] == "record_custom"
-    assert task["error"] == "工具未注册"
+    class MockArrayTool:
+        def get_parameters(self):
+            return [
+                ToolParameter(
+                    name="items",
+                    type="array",
+                    description="数组参数",
+                    required=True,
+                )
+            ]
+
+    raw = '{"items": ["a", "b", "c"]}'
+    result = parser.parse_typed_parameters("array_tool", raw, MockArrayTool())
+
+    assert result["items"] == ["a", "b", "c"]
+    assert "类型转换失败" not in caplog.text

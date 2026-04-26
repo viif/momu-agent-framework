@@ -59,6 +59,8 @@ momu_agent/
 
 本项目使用 `uv` 进行依赖和环境管理。
 
+在 Windows 下通过 Claude Code 运行示例时，若终端默认编码不是 UTF-8，日志中的 emoji 可能触发 `UnicodeEncodeError`。运行示例前请统一附加 UTF-8 前置环境变量：`PYTHONUTF8=1 PYTHONIOENCODING=utf-8`。
+
 ```bash
 # 开发环境安装
 uv sync
@@ -69,14 +71,14 @@ uv sync --extra search
 uv sync --extra memory
 uv sync --extra rag
 
-# 运行示例
-uv run python examples/simple_agent_demo.py
-uv run python examples/react_agent_demo.py
-uv run python examples/plan_solve_agent_demo.py
-uv run python examples/reflection_agent_demo.py
-uv run python examples/rag_tool_demo.py
-uv run python examples/memory_tool_demo.py
-uv run python examples/context_aware_agent_demo.py
+# 运行示例（Windows 下建议保留 UTF-8 前置参数）
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/simple_agent_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/react_agent_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/plan_solve_agent_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/reflection_agent_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/rag_tool_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/memory_tool_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/context_aware_agent_demo.py
 
 # 运行测试
 uv run pytest

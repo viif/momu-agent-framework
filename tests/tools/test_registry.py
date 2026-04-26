@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from momu_agent.core.exceptions import ToolException
+from momu_agent.mcp import MCPToolAdapter
 from momu_agent.tools.base import Tool, ToolParameter
 from momu_agent.tools.registry import ToolRegistry
 
@@ -185,6 +186,50 @@ class TestToolRegistry:
             mock_log.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_register_mcp_client(self, registry):
+        class MockMCPClient:
+            def __init__(self):
+                self.close = AsyncMock(return_value=None)
+
+            async def list_tools(self):
+                return [
+                    MCPToolAdapter(
+                        client=self,
+                        remote_name="list_files",
+                        description="列出文件",
+                        input_schema={},
+                    )
+                ]
+
+        client = MockMCPClient()
+        registered = await registry.register_mcp_client("filesystem", client)
+
+        assert registered == ["filesystem.list_files"]
+        assert registry.get_tool("filesystem.list_files") is not None
+        assert registry._managed_mcp_clients == [client]
+
+    @pytest.mark.asyncio
+    async def test_register_mcp_client_name_conflict(self, registry):
+        registry.register_tool(MockTool(name="filesystem.list_files"))
+
+        class MockMCPClient:
+            async def list_tools(self):
+                return [
+                    MCPToolAdapter(
+                        client=self,
+                        remote_name="list_files",
+                        description="列出文件",
+                        input_schema={},
+                    )
+                ]
+
+            async def close(self):
+                return None
+
+        with pytest.raises(ToolException, match="已存在"):
+            await registry.register_mcp_client("filesystem", MockMCPClient())
+
+    @pytest.mark.asyncio
     async def test_close_calls_all_tool_close(self, registry):
         tool_a = MockTool(name="a")
         tool_b = MockTool(name="b")
@@ -213,6 +258,35 @@ class TestToolRegistry:
         tool_a.close.assert_awaited_once_with()
         tool_b.close.assert_awaited_once_with()
         mock_warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_close_closes_managed_mcp_client_once(self, registry):
+        class MockMCPClient:
+            def __init__(self):
+                self.close = AsyncMock(return_value=None)
+
+            async def list_tools(self):
+                return [
+                    MCPToolAdapter(
+                        client=self,
+                        remote_name="list_files",
+                        description="列出文件",
+                        input_schema={},
+                    ),
+                    MCPToolAdapter(
+                        client=self,
+                        remote_name="read_file",
+                        description="读取文件",
+                        input_schema={},
+                    ),
+                ]
+
+        client = MockMCPClient()
+        await registry.register_mcp_client("filesystem", client)
+
+        await registry.close()
+
+        client.close.assert_awaited_once_with()
 
     def test_get_tools_description(self, registry):
         """测试获取工具描述字符串"""
@@ -269,3 +343,4 @@ class TestToolRegistry:
         registry.clear()
 
         assert len(registry.list_tools()) == 0
+        assert registry._managed_mcp_clients == []

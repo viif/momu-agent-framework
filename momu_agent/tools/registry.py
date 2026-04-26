@@ -1,11 +1,14 @@
 """工具注册表"""
 
 import inspect
-from typing import Any, Awaitable, Callable, NoReturn
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, NoReturn
 
 from ..core.exceptions import ToolException
 from ..utils.logger import get_logger
 from .base import Tool
+
+if TYPE_CHECKING:
+    from ..mcp import MCPClient
 
 
 class ToolRegistry:
@@ -21,6 +24,7 @@ class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, Tool] = {}
         self._functions: dict[str, dict[str, Any]] = {}
+        self._managed_mcp_clients: list["MCPClient"] = []
 
         self.logger = get_logger(__name__)
 
@@ -56,6 +60,36 @@ class ToolRegistry:
 
         self._functions[name] = {"description": description, "func": func}
         self.logger.info(f"🔧 工具 '{name}' 已注册。")
+
+    async def register_mcp_client(self, name: str, client: "MCPClient") -> list[str]:
+        """注册 MCP Client 暴露的远程工具。"""
+        if not name or not name.strip():
+            raise ToolException("MCP Client 名称不能为空")
+
+        tools = await client.list_tools()
+        registered_names: list[str] = []
+        adapted_tools: list[Tool] = []
+
+        for tool in tools:
+            qualified_name = f"{name}.{tool.name}"
+            if qualified_name in self._tools or qualified_name in self._functions:
+                raise ToolException(
+                    f"工具 '{qualified_name}' 已存在，无法注册 MCP 工具"
+                )
+            if qualified_name in registered_names:
+                raise ToolException(f"MCP 工具名称冲突: {qualified_name}")
+
+            tool.name = qualified_name
+            adapted_tools.append(tool)
+            registered_names.append(qualified_name)
+
+        for tool in adapted_tools:
+            self.register_tool(tool)
+
+        if client not in self._managed_mcp_clients:
+            self._managed_mcp_clients.append(client)
+
+        return registered_names
 
     def unregister(self, name: str):
         """注销工具"""
@@ -203,8 +237,15 @@ class ToolRegistry:
             except Exception as e:
                 self.logger.warning(f"🔧 关闭工具 '{name}' 失败: {e}")
 
+        for client in self._managed_mcp_clients:
+            try:
+                await client.close()
+            except Exception as e:
+                self.logger.warning(f"🔧 关闭 MCP Client 失败: {e}")
+
     def clear(self):
         """清空所有工具"""
         self._tools.clear()
         self._functions.clear()
+        self._managed_mcp_clients.clear()
         self.logger.info("🔧 所有工具已清空。")

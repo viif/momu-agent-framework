@@ -42,6 +42,8 @@ class ToolParser:
         "integer": int,
         "int": int,
         "boolean": bool,
+        "array": list,
+        "object": dict,
     }
 
     _COMMON_ACTION_WORDS = {
@@ -338,8 +340,8 @@ class ToolParser:
 
     def _convert_value_type(self, value: Any, param_def: Any) -> Any:
         """按参数定义转换值的类型，转换失败时原值返回"""
-        target_type = param_def.type
-        expected = self._TYPE_MAP.get(target_type.lower())
+        target_type = param_def.type.lower()
+        expected = self._TYPE_MAP.get(target_type)
 
         if expected and isinstance(value, expected):
             return value
@@ -353,7 +355,21 @@ class ToolParser:
                 return (
                     value if isinstance(value, bool) else str(value).lower() == "true"
                 )
+            if target_type == "array":
+                if isinstance(value, str):
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        return parsed
+                    raise ValueError("array 参数不是合法 JSON 数组")
+                return value
+            if target_type == "object":
+                if isinstance(value, str):
+                    parsed = json.loads(value)
+                    if isinstance(parsed, dict):
+                        return parsed
+                    raise ValueError("object 参数不是合法 JSON 对象")
+                return value
             return str(value)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, json.JSONDecodeError):
             self.logger.warning(f"🔍 类型转换失败 {target_type}: {value}")
             return value
