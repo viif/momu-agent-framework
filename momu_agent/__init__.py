@@ -21,6 +21,7 @@ from .tools.builtin.rag import (
     rag_search,
 )
 from .tools.builtin.search import SearchTool, search
+from .tools.builtin.skills import SkillsTool
 from .tools.chain import ToolChain, ToolChainManager
 from .tools.executor import ToolExecutor, run_batch_tool, run_parallel_tools
 from .tools.registry import ToolRegistry
@@ -45,6 +46,7 @@ __all__ = [
     "rag_search",
     "rag_ask",
     "rag_get_stats",
+    "SkillsTool",
     "ToolChain",
     "ToolChainManager",
     "ToolRegistry",

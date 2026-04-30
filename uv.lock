@@ -1420,6 +1420,7 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "tiktoken" },
 ]
 
@@ -1466,6 +1467,7 @@ requires-dist = [
     { name = "openai", specifier = ">=2.31.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scikit-learn", marker = "extra == 'memory'", specifier = ">=1.8.0" },
     { name = "sentence-transformers", marker = "extra == 'memory'", specifier = ">=5.4.1" },
     { name = "sentence-transformers", marker = "extra == 'rag'", specifier = ">=5.4.1" },
