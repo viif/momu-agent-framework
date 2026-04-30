@@ -1,6 +1,6 @@
 # momu-agent-framework
 
-参考 HelloAgents 实现的智能体框架，提供 Agent、工具系统、记忆系统、RAG、上下文工程、MCP 集成与 OpenAI 兼容 LLM 接入能力。
+参考 HelloAgents 实现的智能体框架，提供 Agent、工具系统、Skills、记忆系统、RAG、上下文工程、MCP 集成与 OpenAI 兼容 LLM 接入能力。
 
 ## 特性
 
@@ -9,7 +9,8 @@
 - **工具系统**：`ToolRegistry` 统一管理工具，支持 `Tool` 对象、同步函数、异步函数和远程 MCP 工具注册
 - **工具链与并发**：`ToolChain` / `ToolChainManager` 顺序编排，`ToolExecutor` 并发执行
 - **流式输出**：`SimpleAgent.stream_run()` 支持逐段异步输出
-- **内置工具**：`CalculatorTool`、`SearchTool`、`RAGTool`、`MemoryTool`、`NoteTool`、`TerminalTool`
+- **内置工具**：`CalculatorTool`、`SearchTool`、`RAGTool`、`MemoryTool`、`NoteTool`、`SkillsTool`、`TerminalTool`
+- **Skills 能力**：支持从本地 `skills/<name>/SKILL.md` 加载技能说明，按需缓存，并通过 `SkillsTool` 注入给 Agent 使用
 - **上下文工程**：`ContextBuilder` 实现 GSSC（Gather-Select-Structure-Compress）流程
 - **记忆系统**：`WorkingMemory`、`EpisodicMemory`、`SemanticMemory` 统一管理
 - **RAG 能力**：支持文本/文档入库、检索与基于上下文问答
@@ -100,6 +101,35 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+## 🧩 Skills 使用
+
+`SkillsTool` 默认从当前工作目录下的 `./skills` 读取技能。每个技能使用独立目录，入口文件为 `SKILL.md`。
+
+```text
+skills/
+└── pdf/
+    ├── SKILL.md
+    ├── scripts/
+    ├── examples/
+    └── references/
+```
+
+`SKILL.md` 需要包含 YAML frontmatter，至少声明 `name` 和 `description`：
+
+```md
+---
+name: pdf
+description: 处理 PDF 文件
+---
+
+请根据用户输入完成 PDF 解析与信息提取。
+```
+
+`SkillsTool` 支持以下动作：
+- `list`：列出全部技能描述
+- `get`：加载指定技能内容，参数 `name` 必填，`args` 可选（会替换 `$ARGUMENTS`）
+- `reload`：重新扫描 `skills/` 目录并刷新缓存
+
 ## ▶️ 运行示例
 
 ```bash
@@ -119,10 +149,11 @@ uv run python examples/mcp_client_demo.py
 momu_agent/
 ├── core/               # Agent 抽象、LLM、消息、异常
 ├── tools/              # Tool 抽象、Registry、Chain、Executor、内置工具
-│   └── builtin/        # calculator/search/rag/memory/note/terminal
+│   └── builtin/        # calculator/search/rag/memory/note/skills/terminal
 ├── agents/             # Simple/ReAct/PlanSolve/Reflection
 │   └── parser/         # 工具调用解析器
 ├── context/            # ContextBuilder（GSSC）
+├── skills/             # SkillLoader 与本地技能加载能力
 ├── memory/             # working/episodic/semantic + manager
 ├── storage/            # document/vector/graph 存储
 ├── rag/                # 文档处理与检索管线

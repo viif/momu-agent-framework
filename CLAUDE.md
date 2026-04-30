@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，提供 Agent、工具系统、记忆系统、存储层、RAG、上下文工程能力、OpenAI 兼容 LLM 接入能力，以及基于 stdio 的 MCP 客户端与远程工具注册能力。
+`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，提供 Agent、工具系统、Skills、记忆系统、存储层、RAG、上下文工程能力、OpenAI 兼容 LLM 接入能力，以及基于 stdio 的 MCP 客户端与远程工具注册能力。
 
 ## 包结构
 
@@ -26,6 +26,7 @@ momu_agent/
 │       ├── rag.py         # RAG 工具
 │       ├── memory.py      # 记忆工具
 │       ├── note.py        # 结构化笔记工具
+│       ├── skills.py      # SkillsTool（本地技能加载工具）
 │       └── terminal.py    # 安全命令行工具
 ├── agents/             # Agent 实现
 │   ├── simple_agent.py      # SimpleAgent（async，支持工具调用和流式输出）
@@ -36,6 +37,9 @@ momu_agent/
 │       └── tool_parser.py   # 工具调用解析器
 ├── context/            # 上下文工程
 │   └── builder.py      # ContextBuilder（Gather-Select-Structure-Compress）
+├── skills/             # Skills 加载器
+│   ├── __init__.py     # Skill / SkillLoader 导出
+│   └── loader.py       # SkillLoader（扫描、缓存、按需加载 SKILL.md）
 ├── memory/             # 记忆系统
 │   ├── base.py         # Memory 基类与配置
 │   ├── working.py      # WorkingMemory
@@ -118,9 +122,18 @@ cp .env.example .env
 
 说明：MCP 本身不依赖 `.env` 中的专用变量，通常通过代码中的 stdio 启动命令连接外部 MCP Server。
 
+## Skills
+
+- `SkillsTool` 默认读取当前工作目录下的 `./skills`
+- 每个技能目录以 `SKILL.md` 作为入口文件
+- `SKILL.md` 需包含 YAML frontmatter，至少声明 `name` 和 `description`
+- `SkillLoader` 维护 `metadata_cache` 和 `skills_cache`，支持 `get_descriptions()`、`get_skill()`、`list_skills()`、`reload()`
+- 可选资源目录包括 `scripts/`、`examples/`、`references/`
+- `SkillsTool` 支持 `action=list|get|reload`，其中 `get` 需要 `name`，可选 `args` 会替换技能正文中的 `$ARGUMENTS`
+
 ## 依赖与扩展
 
-- 核心依赖包含 `colorama`、`openai`、`pydantic`、`python-dotenv`、`tiktoken`
+- 核心依赖包含 `colorama`、`openai`、`pydantic`、`python-dotenv`、`PyYAML`、`tiktoken`
 - 可选扩展包含 `search`、`memory`、`rag`、`mcp`
 - `search` 额外依赖 `serpapi`、`tavily-python`
 - `memory` 额外依赖 `aiosqlite`、`chromadb`、`kuzu`、`scikit-learn`、`sentence-transformers`、`spacy`
