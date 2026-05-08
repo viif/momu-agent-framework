@@ -140,21 +140,17 @@ description: 处理 PDF 文件
 
 ## ▶️ 运行示例
 
-在 Windows 下通过 Claude Code 运行示例时，若终端默认编码不是 UTF-8，日志中的 emoji 可能触发 `UnicodeEncodeError`。建议在命令前附加：`PYTHONUTF8=1 PYTHONIOENCODING=utf-8`。
-
 ```bash
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/simple_agent_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/react_agent_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/plan_solve_agent_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/reflection_agent_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/memory_tool_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/rag_tool_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/context_aware_agent_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/mcp_client_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/skills_demo.py
+uv run python examples/simple_agent_demo.py
+uv run python examples/react_agent_demo.py
+uv run python examples/plan_solve_agent_demo.py
+uv run python examples/reflection_agent_demo.py
+uv run python examples/memory_tool_demo.py
+uv run python examples/rag_tool_demo.py
+uv run python examples/context_aware_agent_demo.py
+uv run python examples/mcp_client_demo.py
+uv run python examples/skills_demo.py
 ```
-
-`examples/docs4demo/README_v0.2.0.md` 是 skills 示例中使用的真实 Markdown 目标文件。
 
 ## 🗂️ 目录结构
 
