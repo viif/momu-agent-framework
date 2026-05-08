@@ -4,63 +4,91 @@
 
 ## 项目概述
 
-`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，提供 Agent、工具系统、Skills、记忆系统、存储层、RAG、上下文工程能力、OpenAI 兼容 LLM 接入能力，以及基于 stdio 的 MCP 客户端与远程工具注册能力。
+`momu-agent-framework` 是参考 HelloAgents 框架构建的智能体框架。`momu_agent/` 是主包，当前提供：
+
+- 多种 Agent 实现：`SimpleAgent`、`ReActAgent`、`PlanSolveAgent`、`ReflectionAgent`
+- 工具系统：`Tool` 抽象、`ToolRegistry`、并发执行器、顺序工具链
+- 内置工具：`calculator`、`search`、`rag`、`memory`、`note`、`skills`、`terminal`
+- Skills 能力：本地 `skills/<name>/SKILL.md` 扫描、缓存、按需加载与资源提示
+- 记忆系统：`WorkingMemory`、`EpisodicMemory`、`SemanticMemory` 与 `MemoryManager`
+- RAG：文档切分、索引、检索、排序与问答聚合
+- 上下文工程：`ContextBuilder` 的 Gather-Select-Structure-Compress 流程
+- MCP 集成：基于 stdio 的异步 MCP 客户端与远程工具适配
+- OpenAI 兼容 LLM 接入
 
 ## 包结构
 
 ```text
 momu_agent/
-├── core/               # 核心模块
-│   ├── agent.py        # Agent 抽象基类
-│   ├── exceptions.py   # 异常定义
-│   ├── llm.py          # LLM 封装（OpenAI 兼容接口）
-│   └── message.py      # 消息数据结构
-├── tools/              # 工具系统
-│   ├── base.py         # Tool 抽象基类、ToolParameter（Tool.run 为 async）
-│   ├── registry.py     # ToolRegistry（支持 Tool、函数工具与 MCP Client 注册）
-│   ├── chain.py        # ChainStep / ToolChain / ToolChainManager（顺序工具链）
-│   ├── executor.py     # 异步并发工具执行器
-│   └── builtin/        # 内置工具
-│       ├── calculator.py  # 计算器工具
-│       ├── search.py      # 搜索工具（Tavily / SerpAPI）
-│       ├── rag.py         # RAG 工具
-│       ├── memory.py      # 记忆工具
-│       ├── note.py        # 结构化笔记工具
-│       ├── skills.py      # SkillsTool（本地技能加载工具）
-│       └── terminal.py    # 安全命令行工具
-├── agents/             # Agent 实现
-│   ├── simple_agent.py      # SimpleAgent（async，支持工具调用和流式输出）
-│   ├── react_agent.py       # ReActAgent（Thought → Action → Observation 循环）
-│   ├── plan_solve_agent.py  # PlanSolveAgent（规划分解 → 逐步执行）
-│   ├── reflection_agent.py  # ReflectionAgent（初始生成 → 反思迭代 → 最终答案）
+├── __init__.py
+├── agents/                 # Agent 实现
+│   ├── simple_agent.py     # 基础工具调用 Agent，支持流式输出
+│   ├── react_agent.py      # ReAct Agent
+│   ├── plan_solve_agent.py # 规划-执行 Agent
+│   ├── reflection_agent.py # 反思迭代 Agent
 │   └── parser/
-│       └── tool_parser.py   # 工具调用解析器
-├── context/            # 上下文工程
-│   └── builder.py      # ContextBuilder（Gather-Select-Structure-Compress）
-├── skills/             # Skills 加载器
-│   ├── __init__.py     # Skill / SkillLoader 导出
-│   └── loader.py       # SkillLoader（扫描、缓存、按需加载 SKILL.md）
-├── memory/             # 记忆系统
-│   ├── base.py         # Memory 基类与配置
-│   ├── working.py      # WorkingMemory
-│   ├── episodic.py     # EpisodicMemory
-│   ├── semantic.py     # SemanticMemory（向量+图谱）
-│   └── manager.py      # MemoryManager（多记忆类型统一管理）
-├── storage/            # 存储层
-│   ├── document.py     # 文档存储
-│   ├── vector.py       # 向量存储
-│   └── graph.py        # 图存储（Kuzu）
-├── rag/                # RAG 管线与文档处理
-│   ├── document.py     # 文档与切分
-│   └── pipeline.py     # 检索、索引、排序与聚合
-├── mcp/                # MCP 集成
-│   ├── client.py       # MCPClient（stdio 异步客户端）
-│   └── tool_adapter.py # MCPToolAdapter（远程工具适配器）
+│       └── tool_parser.py  # 工具调用解析器
+├── context/
+│   └── builder.py          # ContextBuilder（GSSC）
+├── core/
+│   ├── agent.py            # Agent 抽象基类
+│   ├── exceptions.py       # Agent / Tool / LLM 异常
+│   ├── llm.py              # OpenAI 兼容 LLM 封装
+│   └── message.py          # 消息数据结构
+├── mcp/
+│   ├── client.py           # MCPClient（stdio 异步客户端）
+│   └── tool_adapter.py     # MCPToolAdapter
+├── memory/
+│   ├── base.py             # Memory 基类与配置
+│   ├── working.py          # WorkingMemory
+│   ├── episodic.py         # EpisodicMemory
+│   ├── semantic.py         # SemanticMemory
+│   └── manager.py          # MemoryManager
+├── rag/
+│   ├── document.py         # 文档解析与切分
+│   └── pipeline.py         # 检索与问答流程
+├── skills/
+│   └── loader.py           # Skill / SkillLoader
+├── storage/
+│   ├── document.py         # 文档存储
+│   ├── vector.py           # 向量存储
+│   └── graph.py            # 图存储（Kuzu）
+├── tools/
+│   ├── base.py             # Tool 抽象与 ToolParameter
+│   ├── registry.py         # ToolRegistry
+│   ├── chain.py            # ToolChain / ToolChainManager
+│   ├── executor.py         # ToolExecutor 与批量/并发执行
+│   └── builtin/
+│       ├── calculator.py   # 计算器工具
+│       ├── memory.py       # 记忆工具
+│       ├── note.py         # 结构化笔记工具
+│       ├── rag.py          # RAG 工具
+│       ├── search.py       # 搜索工具（Tavily / SerpAPI）
+│       ├── skills.py       # SkillsTool
+│       └── terminal.py     # 安全命令行工具
 └── utils/
-    ├── config.py       # 配置管理（从 .env 加载）
-    ├── embedding.py    # 向量嵌入辅助
-    └── logger.py       # 日志工具
+    ├── config.py           # .env 配置加载
+    ├── embedding.py        # 向量嵌入辅助
+    └── logger.py           # 日志工具
 ```
+
+## 示例与测试
+
+当前仓库包含以下示例：
+
+- `examples/simple_agent_demo.py`
+- `examples/react_agent_demo.py`
+- `examples/plan_solve_agent_demo.py`
+- `examples/reflection_agent_demo.py`
+- `examples/memory_tool_demo.py`
+- `examples/rag_tool_demo.py`
+- `examples/context_aware_agent_demo.py`
+- `examples/mcp_client_demo.py`
+- `examples/skills_demo.py`
+
+`examples/docs4demo/README_v0.2.0.md` 用于 skills 示例中的真实 Markdown 目标文件。
+
+测试覆盖目录包括：`agents`、`context`、`core`、`mcp`、`memory`、`rag`、`skills`、`storage`、`tools`、`utils`。
 
 ## 常用命令
 
@@ -84,14 +112,16 @@ PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/simple_agent_demo.py
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/react_agent_demo.py
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/plan_solve_agent_demo.py
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/reflection_agent_demo.py
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/rag_tool_demo.py
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/memory_tool_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/rag_tool_demo.py
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/context_aware_agent_demo.py
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/mcp_client_demo.py
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run python examples/skills_demo.py
 
 # 运行测试
 uv run pytest
 uv run pytest tests/context/test_builder.py
+uv run pytest tests/tools/builtin/test_skills.py
 
 # 检查代码风格（不修改）
 uv run ruff check .
@@ -118,18 +148,40 @@ cp .env.example .env
 | `LLM_API_KEY` | API 密钥 |
 | `LLM_BASE_URL` | API 基础 URL（OpenAI 兼容） |
 
-可选环境变量：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`、`EMBED_MODEL_NAME`。
+常用可选环境变量：`TEMPERATURE`、`MAX_TOKENS`、`TIMEOUT`、`MAX_HISTORY_LENGTH`、`LOG_LEVEL`、`TAVILY_API_KEY`、`SERPAPI_API_KEY`、`EMBED_MODEL_NAME`。
 
-说明：MCP 本身不依赖 `.env` 中的专用变量，通常通过代码中的 stdio 启动命令连接外部 MCP Server。
+说明：MCP 本身通常不依赖 `.env` 中的专用变量，而是通过代码中的 stdio 启动命令连接外部 MCP Server。
 
 ## Skills
 
 - `SkillsTool` 默认读取当前工作目录下的 `./skills`
 - 每个技能目录以 `SKILL.md` 作为入口文件
 - `SKILL.md` 需包含 YAML frontmatter，至少声明 `name` 和 `description`
-- `SkillLoader` 维护 `metadata_cache` 和 `skills_cache`，支持 `get_descriptions()`、`get_skill()`、`list_skills()`、`reload()`
-- 可选资源目录包括 `scripts/`、`examples/`、`references/`
-- `SkillsTool` 支持 `action=list|get|reload`，其中 `get` 需要 `name`，可选 `args` 会替换技能正文中的 `$ARGUMENTS`
+- `SkillLoader` 维护 `metadata_cache` 和 `skills_cache`
+- `SkillLoader` 支持 `get_descriptions()`、`get_skill()`、`list_skills()`、`reload()`
+- 技能目录可选资源包括 `scripts/`、`examples/`、`references/`
+- `SkillsTool` 支持 `action=list|get|reload`
+- `get` 需要 `name`，可选 `args` 会替换技能正文中的 `$ARGUMENTS`
+- 当前仓库内已有示例技能：`markdown-summary`、`python-review`
+
+## 工具系统补充约定
+
+- `Tool.run()` 为 `async` 抽象方法；新增 Tool 子类需实现 `async def run()`
+- `ToolRegistry` 同时支持注册 `Tool` 对象、同步函数、异步函数与 MCP Client
+- `ToolExecutor` 提供并发执行能力，`run_parallel_tools` / `run_batch_tool` 为便捷入口
+- `ToolChain.execute()` / `ToolChainManager.execute_chain()` 为顺序编排能力
+- `TerminalTool` 是白名单式只读命令工具，主要用于仓库探索与文本查看
+
+## 异步约定
+
+- `Agent.run()` 为 `async` 抽象方法，调用时需 `await`
+- `SimpleAgent.stream_run()` 为 `async` 流式接口，调用时需 `async for`
+- `ToolRegistry.execute_tool()` 为异步执行路径
+- `ContextBuilder.build()` 为 `async` 方法
+- `MCPClient.connect()`、`list_tools()`、`call_tool()`、`close()` 均为 `async` 方法
+- 远程 MCP 工具通过 `ToolRegistry.register_mcp_client()` 注册后，以 `client_name.tool_name` 形式暴露
+- 示例入口统一使用 `asyncio.run(main())`
+- 测试使用 pytest-asyncio，配置 `asyncio_mode = "auto"`
 
 ## 依赖与扩展
 
@@ -139,29 +191,18 @@ cp .env.example .env
 - `memory` 额外依赖 `aiosqlite`、`chromadb`、`kuzu`、`scikit-learn`、`sentence-transformers`、`spacy`
 - `rag` 额外依赖 `aiosqlite`、`chromadb`、`markitdown`、`sentence-transformers`
 - `mcp` 额外依赖 `mcp`
-
-## 异步约定
-
-- `Agent.run()` 为 `async` 抽象方法，调用时需 `await`
-- `SimpleAgent.stream_run()` 为 `async` 流式接口，调用时需 `async for`
-- `Tool.run()` 为 `async` 抽象方法；新增 Tool 子类需实现 `async def run()`
-- `ToolRegistry.execute_tool()` 为 `async` 方法；Tool 对象调用与函数工具调用统一走异步执行路径
-- `ToolChain.execute()` / `ToolChainManager.execute_chain()` 为 `async` 方法
-- `ContextBuilder.build()` 为 `async` 方法
-- `MCPClient.connect()`、`list_tools()`、`call_tool()`、`close()` 均为 `async` 方法
-- 远程 MCP 工具通过 `ToolRegistry.register_mcp_client()` 注册后，以 `client_name.tool_name` 形式暴露
-- 示例和脚本入口使用 `asyncio.run(main())`
-- 测试使用 pytest-asyncio，配置 `asyncio_mode = "auto"`，async 测试函数无需额外标注
+- 开发依赖包含 `pytest`、`pytest-asyncio`、`ruff`
 
 ## 代码风格
 
 使用 Ruff，配置如下：
+
 - 行长度：88
 - 目标版本：Python 3.11+
 - 启用规则：`E`（pycodestyle 错误）、`F`（pyflakes）、`I`（isort）
 - 忽略 `E501`（行过长）
 - 字符串使用双引号
-- 类型注解使用 Python 3.10+ 语法：`X | None`、`list[...]`、`dict[...]`，不使用 `typing.Optional/List/Dict`
+- 类型注解使用 Python 3.10+ 语法：`X | None`、`list[...]`、`dict[...]`
 
 ## Git 提交规范
 
@@ -178,7 +219,7 @@ cp .env.example .env
 
 ## CI
 
-CI 在推送/PR 到 `main` 分支时触发，分两个任务：
+CI 在推送或提交 PR 到 `main` 分支时触发，分两个任务：
+
 - `lint`：Python 3.13 环境下执行 Ruff 检查与格式检查
 - `test`：在 Python 3.11、3.12、3.13 上安装全部扩展依赖并运行 pytest（含 sentence-transformers 缓存与 CPU 版 torch 安装）
-
