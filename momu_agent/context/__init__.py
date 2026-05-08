@@ -1,6 +1,6 @@
 """上下文工程模块
 
-为HelloAgents框架提供上下文工程能力：
+为 MomuAgent 框架提供上下文工程能力：
 - ContextBuilder: GSSC流水线（Gather-Select-Structure-Compress）
 - Compactor: 对话压缩整合
 - NotesManager: 结构化笔记管理
