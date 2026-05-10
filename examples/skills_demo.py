@@ -3,14 +3,14 @@ Skills + SimpleAgent 使用示例
 
 演示四种使用方式：
 1. 通过 Agent 列出本地可用技能
-2. 通过 Agent 加载技能并总结真实 Markdown 文档
-3. 通过 Agent 加载技能并审查真实 Python 示例
+2. 通过 Agent 加载技能并审查真实 Python 示例
+3. 通过 Agent 加载技能并将真实 Markdown 文档转换为 PDF
 4. 通过 Agent 刷新 skills 缓存
 
 运行前请先复制 .env.example 为 .env 并填写相关配置：
   cp .env.example .env
 
-本示例默认读取项目根目录下的 ./skills，并通过 terminal 工具读取本地文件。
+本示例默认读取项目根目录下的 ./skills，并通过 terminal 工具读取本地文件或执行命令。
 """
 
 from __future__ import annotations
@@ -61,10 +61,10 @@ def build_agent(config: Config) -> SimpleAgent:
         system_prompt=(
             "你是擅长使用本地技能的助手。"
             "你只有两个可执行工具：skills 和 terminal。"
-            "markdown-summary、python-review 是技能名，不是工具名，绝不能直接把它们当工具调用。"
-            "skills 只负责列出、加载、刷新技能说明，不能读取本地文件。"
-            "terminal 才负责读取本地文件内容。"
-            "如果任务涉及总结或审查本地文件，先用 skills 加载最合适的技能，再用 terminal 读取目标文件，然后基于技能说明和文件内容给出结果。"
+            "code-review、pdf 是技能名，不是工具名，绝不能直接把它们当工具调用。"
+            "skills 只负责列出、加载、刷新技能说明，不能读取本地文件或执行命令。"
+            "terminal 负责读取本地文件内容，以及在仓库内执行与任务相关的安全命令。"
+            "如果任务涉及代码审查、PDF 转换或文件处理，先用 skills 加载最合适的技能，再用 terminal 完成文件读取或命令执行，然后基于技能说明和执行结果给出答案。"
             "只能调用工具列表中真实注册的工具名。"
             "获取结果后，用简洁自然的中文直接回答。"
         ),
@@ -124,23 +124,9 @@ async def demo_list_skills(config: Config) -> None:
     await run_agent_question(agent, question)
 
 
-async def demo_load_markdown_skill(config: Config) -> None:
+async def demo_review_python_skill(config: Config) -> None:
     print("=" * 50)
-    print("示例 2：通过 Agent 加载技能并总结真实 Markdown 文档")
-    print("=" * 50)
-
-    agent = build_agent(config)
-    question = (
-        "请帮我处理一个本地 Markdown 文档总结任务。"
-        "请先选择并加载最合适的本地技能，再读取 examples/docs4demo/README_v0.2.0.md 的内容，"
-        "最后给我一份简短的结构化摘要。"
-    )
-    await run_agent_question(agent, question)
-
-
-async def demo_load_review_skill(config: Config) -> None:
-    print("=" * 50)
-    print("示例 3：通过 Agent 加载技能并审查真实 Python 示例")
+    print("示例 2：通过 Agent 加载技能并审查真实 Python 示例")
     print("=" * 50)
 
     agent = build_agent(config)
@@ -148,6 +134,20 @@ async def demo_load_review_skill(config: Config) -> None:
         "请帮我审查一个本地 Python 示例文件。"
         "请先选择并加载最合适的本地技能，再读取 examples/simple_agent_demo.py 的内容，"
         "重点看看可读性、错误处理和工具使用方式，最后给我审查步骤和几个重点发现。"
+    )
+    await run_agent_question(agent, question)
+
+
+async def demo_convert_markdown_to_pdf_skill(config: Config) -> None:
+    print("=" * 50)
+    print("示例 3：通过 Agent 加载技能并将真实 Markdown 文档转换为 PDF")
+    print("=" * 50)
+
+    agent = build_agent(config)
+    question = (
+        "请帮我把一个本地 Markdown 文档转换为 PDF。"
+        "请先选择并加载最合适的本地技能，再读取 examples/docs4demo/README_v0.2.0.md 的内容，"
+        "然后在仓库内把它转换成 PDF 文件，并告诉我输出文件路径、你使用的方式，以及转换是否成功。"
     )
     await run_agent_question(agent, question)
 
@@ -177,8 +177,8 @@ async def main() -> None:
         return
 
     await demo_list_skills(config)
-    await demo_load_markdown_skill(config)
-    await demo_load_review_skill(config)
+    await demo_review_python_skill(config)
+    await demo_convert_markdown_to_pdf_skill(config)
     await demo_reload_skills(config)
 
 
