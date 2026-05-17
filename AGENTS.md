@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-本文件旨在为 Claude Code (claude.ai/code) 提供在 `momu-agent-framework` 仓库中工作的指导。
+本文件旨在为在 `momu-agent-framework` 仓库中工作的编码代理提供项目背景、常用命令与约定。
 
 ## 项目概述
 
@@ -86,7 +86,7 @@ momu_agent/
 - `examples/mcp_client_demo.py`
 - `examples/skills_demo.py`
 
-`examples/docs4demo/README_v0.2.0.md` 用于 skills 示例中的真实 Markdown 目标文件。
+`examples/docs4demo/README_v0.2.0.md` 用于示例中的真实 Markdown 目标文件。
 
 测试覆盖目录包括：`agents`、`context`、`core`、`mcp`、`memory`、`rag`、`skills`、`storage`、`tools`、`utils`。
 
@@ -94,7 +94,7 @@ momu_agent/
 
 本项目使用 `uv` 进行依赖和环境管理。
 
-在 Windows 下通过 Claude Code 运行示例时，若终端默认编码不是 UTF-8，日志中的 emoji 可能触发 `UnicodeEncodeError`。运行示例前请统一附加 UTF-8 前置环境变量：`PYTHONUTF8=1 PYTHONIOENCODING=utf-8`。
+在 Windows 下运行示例时，若终端默认编码不是 UTF-8，日志中的 emoji 可能触发 `UnicodeEncodeError`。运行示例前请统一附加 UTF-8 前置环境变量：`PYTHONUTF8=1 PYTHONIOENCODING=utf-8`。
 
 ```bash
 # 开发环境安装
@@ -162,7 +162,7 @@ cp .env.example .env
 - 技能目录可选资源包括 `scripts/`、`examples/`、`references/`
 - `SkillsTool` 支持 `action=list|get|reload`
 - `get` 需要 `name`，可选 `args` 会替换技能正文中的 `$ARGUMENTS`
-- 当前仓库内已有示例技能：`markdown-summary`、`python-review`
+- 当前仓库内已有示例技能：`pdf`、`code-review`
 
 ## 工具系统补充约定
 
@@ -170,7 +170,7 @@ cp .env.example .env
 - `ToolRegistry` 同时支持注册 `Tool` 对象、同步函数、异步函数与 MCP Client
 - `ToolExecutor` 提供并发执行能力，`run_parallel_tools` / `run_batch_tool` 为便捷入口
 - `ToolChain.execute()` / `ToolChainManager.execute_chain()` 为顺序编排能力
-- `TerminalTool` 是白名单式只读命令工具，主要用于仓库探索与文本查看
+- `TerminalTool` 是白名单式命令工具，主要用于仓库探索与文本查看；支持 `ls`、`cat`、`grep`、`find`、`awk`、`sed`、`pwd`、`cd` 等命令，并限制在工作目录内
 
 ## 异步约定
 

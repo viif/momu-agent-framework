@@ -16,6 +16,7 @@
 - **上下文工程**：`ContextBuilder` 实现 Gather-Select-Structure-Compress（GSSC）流程
 - **MCP 集成**：`MCPClient` 可通过 stdio 连接 MCP Server，并将远程工具注册到 Agent
 - **OpenAI 兼容**：`LLM` 可接入任何兼容 OpenAI 接口的模型服务
+- **顶层导入**：`momu_agent` 顶层导出常用 Agent、`LLM`、`Config`、工具注册器、工具执行器、计算器、搜索、RAG 与 Skills 工具
 
 ## 📦 安装
 
@@ -133,10 +134,20 @@ description: 处理 PDF 文件
 
 当前仓库自带两个示例技能：
 
-- `skills/markdown-summary/SKILL.md`
-- `skills/python-review/SKILL.md`
+- `skills/pdf/SKILL.md`
+- `skills/code-review/SKILL.md`
 
 并包含对应示例脚本：`examples/skills_demo.py`。
+
+## 🧰 内置工具
+
+- `CalculatorTool`：安全表达式计算，另提供 `calculate` 便捷函数
+- `SearchTool`：Tavily / SerpAPI 搜索封装，另提供 `search` 便捷函数
+- `RAGTool`：文档添加、文本添加、检索、问答与统计，另提供 `rag_add_document`、`rag_add_text`、`rag_search`、`rag_ask`、`rag_get_stats`
+- `MemoryTool`：记忆添加、检索与统计，另提供 `memory_add`、`memory_search`、`memory_get_stats`
+- `NoteTool`：结构化笔记工具
+- `SkillsTool`：本地技能发现、加载与缓存刷新
+- `TerminalTool`：白名单式命令行工具，限制在工作目录内，适合仓库探索与文本查看
 
 ## ▶️ 运行示例
 
